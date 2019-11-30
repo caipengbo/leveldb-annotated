@@ -206,7 +206,7 @@ Status DBImpl::NewDB() {
     // Make "CURRENT" file that points to the new manifest file.
     s = SetCurrentFile(env_, dbname_, 1);
   } else {
-    env_->DeleteFile(manifest);
+    env_->RemoveFile(manifest);
   }
   return s;
 }
@@ -282,7 +282,7 @@ void DBImpl::DeleteObsoleteFiles() {
   // are therefore safe to delete while allowing other threads to proceed.
   mutex_.Unlock();
   for (const std::string& filename : files_to_delete) {
-    env_->DeleteFile(dbname_ + "/" + filename);
+    env_->RemoveFile(dbname_ + "/" + filename);
   }
   mutex_.Lock();
 }
@@ -729,7 +729,7 @@ void DBImpl::BackgroundCompaction() {
     // Move file to next level
     assert(c->num_input_files(0) == 1);
     FileMetaData* f = c->input(0, 0);
-    c->edit()->DeleteFile(c->level(), f->number);
+    c->edit()->RemoveFile(c->level(), f->number);
     c->edit()->AddFile(c->level() + 1, f->number, f->file_size, f->smallest,
                        f->largest);
     status = versions_->LogAndApply(c->edit(), &mutex_);
@@ -1539,15 +1539,15 @@ Status DestroyDB(const std::string& dbname, const Options& options) {
     for (size_t i = 0; i < filenames.size(); i++) {
       if (ParseFileName(filenames[i], &number, &type) &&
           type != kDBLockFile) {  // Lock file will be deleted at end
-        Status del = env->DeleteFile(dbname + "/" + filenames[i]);
+        Status del = env->RemoveFile(dbname + "/" + filenames[i]);
         if (result.ok() && !del.ok()) {
           result = del;
         }
       }
     }
     env->UnlockFile(lock);  // Ignore error since state is already gone
-    env->DeleteFile(lockname);
-    env->DeleteDir(dbname);  // Ignore error in case dir contains other files
+    env->RemoveFile(lockname);
+    env->RemoveDir(dbname);  // Ignore error in case dir contains other files
   }
   return result;
 }
