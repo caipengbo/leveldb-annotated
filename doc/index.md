@@ -121,7 +121,8 @@ amount of data into the database you can handle lost updates by restarting the
 bulk load after a crash. A hybrid scheme is also possible where every Nth write
 is synchronous, and in the event of a crash, the bulk load is restarted just
 after the last synchronous write finished by the previous run. (The synchronous
-write can update a marker that describes where to restart on a crash.)
+write can update a marker that describes where to restart on a crash.) 
+每N次就落一次盘，然后启动的时候，从最近的一次落盘点restart，相当于打了一个marker
 
 `WriteBatch` provides an alternative to asynchronous writes. Multiple updates
 may be placed in the same WriteBatch and applied together using a synchronous
@@ -201,9 +202,11 @@ state that was being maintained just to support reading as of that snapshot.
 
 ## Slice
 
+数据的key或者value都可以称为Slice
+
 The return value of the `it->key()` and `it->value()` calls above are instances
 of the `leveldb::Slice` type. Slice is a simple structure that contains a length
-and a pointer to an external byte array. Returning a Slice is a cheaper
+and a pointer to an **external** byte array. Returning a Slice is a cheaper
 alternative to returning a `std::string` since we do not need to copy
 potentially large keys and values. In addition, leveldb methods do not return
 null-terminated C-style strings since leveldb keys and values are allowed to
@@ -238,7 +241,7 @@ if (...) {
 }
 Use(slice);
 ```
-
+注意slice知识一个外部指针。
 When the if statement goes out of scope, str will be destroyed and the backing
 storage for slice will disappear.
 
@@ -251,6 +254,7 @@ we should sort by the first number, breaking ties by the second number. First,
 define a proper subclass of `leveldb::Comparator` that expresses these rules:
 
 ```c++
+// 自定义比较器
 class TwoPartComparator : public leveldb::Comparator {
  public:
   // Three-way comparison function:
@@ -358,6 +362,7 @@ according to application level data sizes, without any reduction from
 compression. (Caching of compressed blocks is left to the operating system
 buffer cache, or any custom Env implementation provided by the client.)
 
+有时候需要禁用缓存，因为不希望批量读的时候更新缓存。
 When performing a bulk read, the application may wish to disable caching so that
 the data processed by the bulk read does not end up displacing most of the
 cached contents. A per-iterator option can be used to achieve this:
@@ -449,6 +454,8 @@ filter but uses some other mechanism for summarizing a set of keys. See
 
 ## Checksums
 
+校验数据，因为数据库有可能内部发生损坏。
+
 leveldb associates checksums with all data it stores in the file system. There
 are two separate controls provided over how aggressively these checksums are
 verified:
@@ -505,6 +512,7 @@ Status s = leveldb::DB::Open(options, ...);
 ```
 
 ## Porting
+移植
 
 leveldb may be ported to a new platform by providing platform specific
 implementations of the types/methods/functions exported by

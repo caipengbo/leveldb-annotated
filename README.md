@@ -1,3 +1,10 @@
+# Read leveldb source code 
+
+- version 1.22.0
+- Run this code
+- Add my Chinese comments
+---------
+
 **LevelDB is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.**
 
 [![Build Status](https://travis-ci.org/google/leveldb.svg?branch=master)](https://travis-ci.org/google/leveldb)

@@ -267,14 +267,15 @@ if(HAVE_CLANG_THREAD_SAFETY)
       -Werror -Wthread-safety)
 endif(HAVE_CLANG_THREAD_SAFETY)
 
+# 三种库
 if(HAVE_CRC32C)
-  target_link_libraries(leveldb crc32c)
+  target_link_libraries(leveldb crc32c)  # 循环冗余校验
 endif(HAVE_CRC32C)
 if(HAVE_SNAPPY)
-  target_link_libraries(leveldb snappy)
+  target_link_libraries(leveldb snappy)  # 压缩、解压
 endif(HAVE_SNAPPY)
 if(HAVE_TCMALLOC)
-  target_link_libraries(leveldb tcmalloc)
+  target_link_libraries(leveldb tcmalloc)  # 管理内存
 endif(HAVE_TCMALLOC)
 
 # Needed by port_stdcxx.h
@@ -343,6 +344,7 @@ if(LEVELDB_BUILD_TESTS)
   leveldb_test("util/env_test.cc")
   leveldb_test("util/status_test.cc")
   leveldb_test("util/no_destructor_test.cc")
+  leveldb_test("test/TestMain.cpp")
 
   if(NOT BUILD_SHARED_LIBS)
     leveldb_test("db/autocompact_test.cc")
