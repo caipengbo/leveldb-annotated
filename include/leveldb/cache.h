@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 //
-// A Cache is an interface that maps keys to values.  It has internal
+// A Cache is an interface that maps keys to values.  (线程安全)It has internal
 // synchronization and may be safely accessed concurrently from
 // multiple threads.  It may automatically evict entries to make room
 // for new entries.  Values have a specified charge against the cache
 // capacity.  For example, a cache where the values are variable
 // length strings, may use the length of the string as the charge for
 // the string.
-//
+// LRU策略
 // A builtin cache implementation with a least-recently-used eviction
 // policy is provided.  Clients may use their own implementations if
 // they want something more sophisticated (like scan-resistance, a
@@ -42,7 +42,8 @@ class LEVELDB_EXPORT Cache {
   // function that was passed to the constructor.
   virtual ~Cache();
 
-  // Opaque handle to an entry stored in the cache.
+  // Opaque(不透明的) handle to an entry stored in the cache.
+  // 后续用于强制类型转换：先自己定义一个结构体,在实现Cache相应的函数时,在返回或使用时调用 reinterpret_cast<Cache::Handle*>.
   struct Handle {};
 
   // Insert a mapping from key->value into the cache and assign it
@@ -97,6 +98,7 @@ class LEVELDB_EXPORT Cache {
   // cache.
   virtual size_t TotalCharge() const = 0;
 
+//  TODO: 做什么的？
  private:
   void LRU_Remove(Handle* e);
   void LRU_Append(Handle* e);

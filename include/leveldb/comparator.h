@@ -11,6 +11,7 @@
 
 namespace leveldb {
 
+// 如果不在此处声明Slice，需要引入slice.h头文件
 class Slice;
 
 // A Comparator object provides a total order across slices that are

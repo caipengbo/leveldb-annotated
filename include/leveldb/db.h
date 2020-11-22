@@ -55,6 +55,7 @@ class LEVELDB_EXPORT DB {
 
   DB() = default;
 
+  // 禁止复制构造和赋值函数，如果有多个DB实例,那对于文件的写将会出现混乱.
   DB(const DB&) = delete;
   DB& operator=(const DB&) = delete;
 
