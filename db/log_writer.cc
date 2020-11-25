@@ -56,6 +56,7 @@ Status Writer::AddRecord(const Slice& slice) {
     // Invariant: we never leave < kHeaderSize bytes in a block.
     assert(kBlockSize - block_offset_ - kHeaderSize >= 0);
 
+    // 计算每次写入的 fragment 大小
     const size_t avail = kBlockSize - block_offset_ - kHeaderSize;
     const size_t fragment_length = (left < avail) ? left : avail;
 
@@ -78,7 +79,7 @@ Status Writer::AddRecord(const Slice& slice) {
   } while (s.ok() && left > 0);
   return s;
 }
-
+// 每次写入一个Record
 Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
                                   size_t length) {
   assert(length <= 0xffff);  // Must fit in two bytes
@@ -86,6 +87,7 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
 
   // Format the header
   char buf[kHeaderSize];
+  // 0 1 2 3 | 4 5 | 6
   buf[4] = static_cast<char>(length & 0xff);
   buf[5] = static_cast<char>(length >> 8);
   buf[6] = static_cast<char>(t);
@@ -93,6 +95,7 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
   // Compute the crc of the record type and the payload.
   uint32_t crc = crc32c::Extend(type_crc_[t], ptr, length);
   crc = crc32c::Mask(crc);  // Adjust for storage
+  // 设置固定32byte的record  crc+buf
   EncodeFixed32(buf, crc);
 
   // Write the header and the payload

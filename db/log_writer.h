@@ -43,9 +43,9 @@ class Writer {
   int block_offset_;  // Current offset in block
 
   // crc32c values for all supported record types.  These are
-  // pre-computed to reduce the overhead of computing the crc of the
+  // pre-computed to reduceuint32_t type_crc_[kMaxRecordType + 1]; the overhead of computing the crc of the
   // record type stored in the header.
-  uint32_t type_crc_[kMaxRecordType + 1];
+
 };
 
 }  // namespace log

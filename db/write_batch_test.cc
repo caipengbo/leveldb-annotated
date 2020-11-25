@@ -12,12 +12,16 @@
 namespace leveldb {
 
 static std::string PrintContents(WriteBatch* b) {
+  // BytewiseComparator来自于哪个头文件？
+  // memtable.h <- dbformat <- comparator.h
   InternalKeyComparator cmp(BytewiseComparator());
   MemTable* mem = new MemTable(cmp);
   mem->Ref();
   std::string state;
+  // 插入Memtable
   Status s = WriteBatchInternal::InsertInto(b, mem);
   int count = 0;
+  // 遍历MemTable打印出内容
   Iterator* iter = mem->NewIterator();
   for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
     ParsedInternalKey ikey;
@@ -62,7 +66,7 @@ TEST(WriteBatchTest, Multiple) {
   batch.Put(Slice("foo"), Slice("bar"));
   batch.Delete(Slice("box"));
   batch.Put(Slice("baz"), Slice("boo"));
-  WriteBatchInternal::SetSequence(&batch, 100);
+  WriteBatchInternal::SetSequence(&batch, 100);  // 设置序列号
   ASSERT_EQ(100, WriteBatchInternal::Sequence(&batch));
   ASSERT_EQ(3, WriteBatchInternal::Count(&batch));
   ASSERT_EQ(
