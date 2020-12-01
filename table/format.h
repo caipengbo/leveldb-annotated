@@ -12,6 +12,8 @@
 #include "leveldb/status.h"
 #include "leveldb/table_builder.h"
 
+// 一些与Table有关的格式定义：block footer
+
 namespace leveldb {
 
 class Block;
@@ -20,6 +22,7 @@ struct ReadOptions;
 
 // BlockHandle is a pointer to the extent of a file that stores a data
 // block or a meta block.
+// 文件的offset和size，指向的是文件的一个范围，也就是索引所需要的内容
 class BlockHandle {
  public:
   // Maximum encoding length of a BlockHandle
@@ -35,6 +38,7 @@ class BlockHandle {
   uint64_t size() const { return size_; }
   void set_size(uint64_t size) { size_ = size; }
 
+  // offset+size 放到dst中
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* input);
 
@@ -61,7 +65,7 @@ class Footer {
   // The block handle for the index block of the table
   const BlockHandle& index_handle() const { return index_handle_; }
   void set_index_handle(const BlockHandle& h) { index_handle_ = h; }
-
+  // 将要储存的值，转化为string，便于Add
   void EncodeTo(std::string* dst) const;
   Status DecodeFrom(Slice* input);
 

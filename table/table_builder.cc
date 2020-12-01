@@ -42,7 +42,7 @@ struct TableBuilder::Rep {
   Status status;
   BlockBuilder data_block;
   BlockBuilder index_block;
-  std::string last_key;
+  std::string last_key;  // 新data_block的索引key
   int64_t num_entries;
   bool closed;  // Either Finish() or Abandon() has been called.
   FilterBlockBuilder* filter_block;
@@ -99,15 +99,21 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
     assert(r->options.comparator->Compare(key, Slice(r->last_key)) > 0);
   }
 
+  //  data_block已经落盘
   if (r->pending_index_entry) {
-    assert(r->data_block.empty());
+    assert(r->data_block.empty());  // 检查一下data_block是否已经落盘
+    // 取出上一次落盘的data_block的last_key(last_key <= 最短key < key)
+    // 这个key作为index_block的key,也就是新的data_block的索引的key
     r->options.comparator->FindShortestSeparator(&r->last_key, key);
     std::string handle_encoding;
+    // 获取索引数据（handle数据）
     r->pending_handle.EncodeTo(&handle_encoding);
+    // index_block加入内容，索引的value是handle数据（offset）
     r->index_block.Add(r->last_key, Slice(handle_encoding));
     r->pending_index_entry = false;
   }
 
+  // 往 filter_block 中加入数据
   if (r->filter_block != nullptr) {
     r->filter_block->AddKey(key);
   }
@@ -128,9 +134,10 @@ void TableBuilder::Flush() {
   if (!ok()) return;
   if (r->data_block.empty()) return;
   assert(!r->pending_index_entry);
+  // data_block落盘，并更新r->pending_handle中的索引值
   WriteBlock(&r->data_block, &r->pending_handle);
   if (ok()) {
-    r->pending_index_entry = true;
+    r->pending_index_entry = true;  // 打开开关，index也可以落盘了
     r->status = r->file->Flush();
   }
   if (r->filter_block != nullptr) {
@@ -174,12 +181,17 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   block->Reset();
 }
 
+// handle作为参数是用来，修改handle的offset和size的值的
+// 写入的时候，才能知道它在file中的offset
 void TableBuilder::WriteRawBlock(const Slice& block_contents,
                                  CompressionType type, BlockHandle* handle) {
   Rep* r = rep_;
+  // 修改handle
   handle->set_offset(r->offset);
   handle->set_size(block_contents.size());
+  // 文件中追加东西，要注意的是，Append也是会落盘的
   r->status = r->file->Append(block_contents);
+  // block的 type+crc
   if (r->status.ok()) {
     char trailer[kBlockTrailerSize];
     trailer[0] = type;
@@ -195,8 +207,10 @@ void TableBuilder::WriteRawBlock(const Slice& block_contents,
 
 Status TableBuilder::status() const { return rep_->status; }
 
+// 当前sstable结束
 Status TableBuilder::Finish() {
   Rep* r = rep_;
+  // 调用Flush，最后一个data_block追加（落盘）完毕
   Flush();
   assert(!r->closed);
   r->closed = true;
@@ -204,12 +218,15 @@ Status TableBuilder::Finish() {
   BlockHandle filter_block_handle, metaindex_block_handle, index_block_handle;
 
   // Write filter block
+  // 与此同时会获得 filter_block_handle数据的handle数据
   if (ok() && r->filter_block != nullptr) {
     WriteRawBlock(r->filter_block->Finish(), kNoCompression,
                   &filter_block_handle);
   }
 
   // Write metaindex block
+  // meta index block中（Entry的value部分）存储的是
+  // filter block的索引信息（BlockHandle数据，在sstable文件中的偏移量以及数据长度）
   if (ok()) {
     BlockBuilder meta_index_block(&r->options);
     if (r->filter_block != nullptr) {
@@ -218,6 +235,7 @@ Status TableBuilder::Finish() {
       key.append(r->options.filter_policy->Name());
       std::string handle_encoding;
       filter_block_handle.EncodeTo(&handle_encoding);
+      // meta index block也是 block，所以也是 data+type+crc的格式
       meta_index_block.Add(key, handle_encoding);
     }
 
@@ -240,6 +258,7 @@ Status TableBuilder::Finish() {
   // Write footer
   if (ok()) {
     Footer footer;
+    // Footer存储的是 meta index block 及 index block 的索引信息
     footer.set_metaindex_handle(metaindex_block_handle);
     footer.set_index_handle(index_block_handle);
     std::string footer_encoding;

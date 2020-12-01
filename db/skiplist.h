@@ -128,7 +128,7 @@ class SkipList {
   Node* FindLast() const;
 
   // Immutable after construction
-  Comparator const compare_;
+  Comparator const compare_;  // 重载调用运算符
   Arena* const arena_;  // Arena used for allocations of nodes
 
   Node* const head_;

@@ -31,9 +31,11 @@ Writer::Writer(WritableFile* dest, uint64_t dest_length)
 
 Writer::~Writer() = default;
 
+// 添加日志记录，格式在log_format.h中定义
+// slice中的数据是日志的数据部分
 Status Writer::AddRecord(const Slice& slice) {
   const char* ptr = slice.data();
-  size_t left = slice.size();
+  size_t left = slice.size();  // 字节数
 
   // Fragment the record if necessary and emit it.  Note that if slice
   // is empty, we still want to iterate once to emit a single
@@ -41,6 +43,7 @@ Status Writer::AddRecord(const Slice& slice) {
   Status s;
   bool begin = true;
   do {
+    // 当前block的剩余空间
     const int leftover = kBlockSize - block_offset_;
     assert(leftover >= 0);
     if (leftover < kHeaderSize) {
@@ -56,8 +59,9 @@ Status Writer::AddRecord(const Slice& slice) {
     // Invariant: we never leave < kHeaderSize bytes in a block.
     assert(kBlockSize - block_offset_ - kHeaderSize >= 0);
 
-    // 计算每次写入的 fragment 大小
+    // 剩余的数据
     const size_t avail = kBlockSize - block_offset_ - kHeaderSize;
+    // 计算每次写入的 fragment 大小
     const size_t fragment_length = (left < avail) ? left : avail;
 
     RecordType type;
@@ -73,13 +77,13 @@ Status Writer::AddRecord(const Slice& slice) {
     }
 
     s = EmitPhysicalRecord(type, ptr, fragment_length);
-    ptr += fragment_length;
-    left -= fragment_length;
+    ptr += fragment_length;  // 移动数据指针
+    left -= fragment_length;  // 更新剩余数据大小
     begin = false;
   } while (s.ok() && left > 0);
   return s;
 }
-// 每次写入一个Record
+// 打包 Record
 Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
                                   size_t length) {
   assert(length <= 0xffff);  // Must fit in two bytes
@@ -88,20 +92,22 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
   // Format the header
   char buf[kHeaderSize];
   // 0 1 2 3 | 4 5 | 6
+  // length
   buf[4] = static_cast<char>(length & 0xff);
   buf[5] = static_cast<char>(length >> 8);
+  // type
   buf[6] = static_cast<char>(t);
 
   // Compute the crc of the record type and the payload.
   uint32_t crc = crc32c::Extend(type_crc_[t], ptr, length);
   crc = crc32c::Mask(crc);  // Adjust for storage
-  // 设置固定32byte的record  crc+buf
+  // 设置 32位（4byte）数据
   EncodeFixed32(buf, crc);
 
   // Write the header and the payload
-  Status s = dest_->Append(Slice(buf, kHeaderSize));
+  Status s = dest_->Append(Slice(buf, kHeaderSize));  // 写入 record 头
   if (s.ok()) {
-    s = dest_->Append(Slice(ptr, length));
+    s = dest_->Append(Slice(ptr, length));  // 写入 record Data
     if (s.ok()) {
       s = dest_->Flush();
     }

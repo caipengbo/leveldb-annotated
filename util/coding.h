@@ -19,7 +19,7 @@
 
 namespace leveldb {
 
-// Standard Put... routines append to a string
+// Standard Put... routines append to a string, value -> dst中
 void PutFixed32(std::string* dst, uint32_t value);
 void PutFixed64(std::string* dst, uint64_t value);
 void PutVarint32(std::string* dst, uint32_t value);

@@ -70,6 +70,7 @@ class MemTable {
   struct KeyComparator {
     const InternalKeyComparator comparator;
     explicit KeyComparator(const InternalKeyComparator& c) : comparator(c) {}
+    // 重载调用运算符，在 在跳表中会使用
     int operator()(const char* a, const char* b) const;
   };
 
