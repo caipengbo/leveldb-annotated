@@ -337,7 +337,7 @@ class Compaction {
   // Maximum size of files to build during this compaction.
   uint64_t MaxOutputFileSize() const { return max_output_file_size_; }
 
-  // Is this a trivial compaction that can be implemented by just
+  // Is this a trivial(不重要的) compaction that can be implemented by just
   // moving a single input file to the next level (no merging or splitting)
   bool IsTrivialMove() const;
 
@@ -349,7 +349,7 @@ class Compaction {
   // in levels greater than "level+1".
   bool IsBaseLevelForKey(const Slice& user_key);
 
-  // Returns true iff we should stop building the current output
+  // Returns true if we should stop building the current output
   // before processing "internal_key".
   bool ShouldStopBefore(const Slice& internal_key);
 
@@ -369,6 +369,8 @@ class Compaction {
   VersionEdit edit_;
 
   // Each compaction reads inputs from "level_" and "level_+1"
+  // input[0] leve层需要Compaction的sstable文件
+  // input[1] level+1层需要Compaction的sstable文件
   std::vector<FileMetaData*> inputs_[2];  // The two sets of inputs
 
   // State used to check for number of overlapping grandparent files

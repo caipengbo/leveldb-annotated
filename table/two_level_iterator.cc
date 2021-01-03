@@ -15,6 +15,7 @@ namespace {
 
 typedef Iterator* (*BlockFunction)(void*, const ReadOptions&, const Slice&);
 
+// 用于归并
 class TwoLevelIterator : public Iterator {
  public:
   TwoLevelIterator(Iterator* index_iter, BlockFunction block_function,

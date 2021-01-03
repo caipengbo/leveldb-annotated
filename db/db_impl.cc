@@ -497,6 +497,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   return status;
 }
 
+// Minor Compaction
 Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                                 Version* base) {
   mutex_.AssertHeld();
@@ -511,6 +512,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   Status s;
   {
     mutex_.Unlock();
+    // 落盘（写SStable）
     s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
     mutex_.Lock();
   }
@@ -523,13 +525,16 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
   // Note that if file_size is zero, the file has been deleted and
   // should not be added to the manifest.
+  // 如果file_size是0，说明file被删除了，就不应该被加入manifest
   int level = 0;
   if (s.ok() && meta.file_size > 0) {
     const Slice min_user_key = meta.smallest.user_key();
     const Slice max_user_key = meta.largest.user_key();
     if (base != nullptr) {
+      // 计算新生产的sstable所属层级
       level = base->PickLevelForMemTableOutput(min_user_key, max_user_key);
     }
+    // 将写生成的文件
     edit->AddFile(level, meta.number, meta.file_size, meta.smallest,
                   meta.largest);
   }
@@ -541,6 +546,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   return s;
 }
 
+//
 void DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
   assert(imm_ != nullptr);
@@ -574,18 +580,22 @@ void DBImpl::CompactMemTable() {
   }
 }
 
+// 外部接口，手动进行Compaction操作，与begin 和 end 有重叠的 sst文件进行Compaction
 void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
   int max_level_with_files = 1;
   {
     MutexLock l(&mutex_);
     Version* base = versions_->current();
+    // 获取最大overlap层级
     for (int level = 1; level < config::kNumLevels; level++) {
       if (base->OverlapInLevel(level, begin, end)) {
         max_level_with_files = level;
       }
     }
   }
+  // 强制将当前memtable进行 Minor Compaction
   TEST_CompactMemTable();  // TODO(sanjay): Skip if memtable does not overlap
+  // 将存在overlap的层级都进行 Compaction
   for (int level = 0; level < max_level_with_files; level++) {
     TEST_CompactRange(level, begin, end);
   }
@@ -654,6 +664,7 @@ void DBImpl::RecordBackgroundError(const Status& s) {
   }
 }
 
+// Compaction的时机，检查是否可以进行Compaction
 void DBImpl::MaybeScheduleCompaction() {
   mutex_.AssertHeld();
   if (background_compaction_scheduled_) {
@@ -697,15 +708,19 @@ void DBImpl::BackgroundCall() {
 void DBImpl::BackgroundCompaction() {
   mutex_.AssertHeld();
 
+  // Minor Compaction
   if (imm_ != nullptr) {
     CompactMemTable();
     return;
   }
 
+  // Major Compaction: Manual Compaction、 Size Compaction、Seek Compaction
+  // 选出要进行的 Major Compaction —— Compaction c
   Compaction* c;
   bool is_manual = (manual_compaction_ != nullptr);
   InternalKey manual_end;
   if (is_manual) {
+    // Manual Compaction
     ManualCompaction* m = manual_compaction_;
     c = versions_->CompactRange(m->level, m->begin, m->end);
     m->done = (c == nullptr);
@@ -718,9 +733,10 @@ void DBImpl::BackgroundCompaction() {
         (m->end ? m->end->DebugString().c_str() : "(end)"),
         (m->done ? "(end)" : manual_end.DebugString().c_str()));
   } else {
+    // Size Compaction or Seek Compaction
     c = versions_->PickCompaction();
   }
-
+  // 实际进行 Major Compaction
   Status status;
   if (c == nullptr) {
     // Nothing to do
@@ -741,6 +757,7 @@ void DBImpl::BackgroundCompaction() {
         static_cast<unsigned long long>(f->file_size),
         status.ToString().c_str(), versions_->LevelSummary(&tmp));
   } else {
+    // Do Major Compaction
     CompactionState* compact = new CompactionState(c);
     status = DoCompactionWork(compact);
     if (!status.ok()) {
@@ -884,6 +901,12 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
   return versions_->LogAndApply(compact->compaction->edit(), &mutex_);
 }
 
+// 根据 CompactionState进行实际的(Major)Compaction
+//Compact工作。
+//1.将待Compact的input[0]、input[1]文件创建为迭代器访问
+//2.Seek到迭代器的最小key，并开始循环访问这些key并进行Compact
+//3.在循环的过程中，如果有immutable，那就优先处理进行下Compact
+//4.判断下当前准备Compact的文件对应的key是否需要提前停止Compact,并将当前的文件落地为SSTable
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
@@ -902,6 +925,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     compact->smallest_snapshot = snapshots_.oldest()->sequence_number();
   }
 
+  // 生成 merging iterator（多路归并后的iterator）
   Iterator* input = versions_->MakeInputIterator(compact->compaction);
 
   // Release mutex while we're actually doing the compaction work
@@ -913,11 +937,14 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   std::string current_user_key;
   bool has_current_user_key = false;
   SequenceNumber last_sequence_for_key = kMaxSequenceNumber;
+  // 遍历merging iterator 完成Compaction
   while (input->Valid() && !shutting_down_.load(std::memory_order_acquire)) {
     // Prioritize immutable compaction work
+    // 当进行minor compaction的时候有major compaction正在进行，则会首先暂停major compaction
     if (has_imm_.load(std::memory_order_relaxed)) {
       const uint64_t imm_start = env_->NowMicros();
       mutex_.Lock();
+      //  存在immtable, 优先进行minor Compaction
       if (imm_ != nullptr) {
         CompactMemTable();
         // Wake up MakeRoomForWrite() if necessary.
@@ -928,17 +955,19 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     }
 
     Slice key = input->key();
+    // 到了该停的地方，调用FinishCompactionOutputFile进行落盘
     if (compact->compaction->ShouldStopBefore(key) &&
         compact->builder != nullptr) {
       status = FinishCompactionOutputFile(compact, input);
       if (!status.ok()) {
-        break;
+        break;  // 出错才退出迭代
       }
     }
 
     // Handle key/value, add to state, etc.
+    //确定当前key是否要丢弃（delete、过时）
     bool drop = false;
-    if (!ParseInternalKey(key, &ikey)) {
+    if (!ParseInternalKey(key, &ikey)) {  // 解析key出错
       // Do not hide error keys
       current_user_key.clear();
       has_current_user_key = false;
@@ -948,13 +977,18 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
           user_comparator()->Compare(ikey.user_key, Slice(current_user_key)) !=
               0) {
         // First occurrence of this user key
+        // 前后检测的两个InternalKey不一样，是首次出现的key
+        // 记录这个首次出现的key，并将last_sequence_for_key设置为最大。
         current_user_key.assign(ikey.user_key.data(), ikey.user_key.size());
         has_current_user_key = true;
         last_sequence_for_key = kMaxSequenceNumber;
       }
-
+      //如果前后两个key不一样，last_sequence_for_key会被赋值为kMaxSequenceNumber
       if (last_sequence_for_key <= compact->smallest_snapshot) {
         // Hidden by an newer entry for same user key
+        //进入此逻辑，说明last_sequence_for_key不是最大值kMaxSequenceNumber，
+        //也就是当前这个key的user_key(是一个比较旧的userkey)和上一个key的user_key是相同的。
+        //所以这里就直接丢弃。
         drop = true;  // (A)
       } else if (ikey.type == kTypeDeletion &&
                  ikey.sequence <= compact->smallest_snapshot &&
@@ -965,7 +999,22 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         // (3) data in layers that are being compacted here and have
         //     smaller sequence numbers will be dropped in the next
         //     few iterations of this loop (by rule (A) above).
-        // Therefore this deletion marker is obsolete and can be dropped.
+        // Therefore this deletion marker is obsolete（废弃的） and can be dropped.
+        //如果这个InternalKey满足以下三个条件，则可以直接丢弃。
+        // 1.是个Deletionkey。
+        // 2.sequence <= small_snaphshot。
+        // 3.当前compact的level是level_n和level_n+1，如果在level_n+1以上的层已经没有此InternalKey对应的user_key了。
+        //基于以上三种情况可删除。
+        //为什么要此条件(IsBaseLevelForKey)判断呢？
+        //举个例子：
+        //如果在更高层，还有此InternalKey对应的User_key，
+        //此时你把当前这个InternalKey删除了，那就会出现两个问题：
+        //问题1：再次读取删除的key时，就会读取到老的过期的key(这个key的type是非deletion)，这是有问题的。
+        //问题2：再次合并时，但这个key(这个key的type是非deletion)首次被读取时last_sequence_for_key会设置为kMaxSequenceNumber，
+        //      这样就也不会丢弃。
+        //以上两个问题好像在更高层的也就是旧的此key的所有userkey的type都是是delete的时候好像是没问题的，
+        //但这毕竟是少数，原则上为了系统正常运行，我们每次丢弃一个标记为kTypeDeletion的key时，
+        //必须保证数据库中不存在它的过期key，否则就得将它保留，直到后面它和这个过期的key合并为止，合并之后再丢弃
         drop = true;
       }
 
@@ -980,32 +1029,37 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
         compact->compaction->IsBaseLevelForKey(ikey.user_key),
         (int)last_sequence_for_key, (int)compact->smallest_snapshot);
 #endif
-
+    //写入不丢弃的key
     if (!drop) {
       // Open output file if necessary
       if (compact->builder == nullptr) {
+        //1.打开SSTable文件
         status = OpenCompactionOutputFile(compact);
         if (!status.ok()) {
           break;
         }
       }
+
+      // 更新当前文件的largest（或者smallest）
       if (compact->builder->NumEntries() == 0) {
         compact->current_output()->smallest.DecodeFrom(key);
       }
       compact->current_output()->largest.DecodeFrom(key);
+      // 写入key到当前文件
       compact->builder->Add(key, input->value());
 
       // Close output file if it is big enough
+      //待生成的SSTable已超过特定阈值，那么就将此SSTable文件落盘
       if (compact->builder->FileSize() >=
           compact->compaction->MaxOutputFileSize()) {
         status = FinishCompactionOutputFile(compact, input);
         if (!status.ok()) {
-          break;
+          break;  // 出错才退出迭代
         }
       }
     }
 
-    input->Next();
+    input->Next();  // 继续迭代
   }
 
   if (status.ok() && shutting_down_.load(std::memory_order_acquire)) {
@@ -1330,7 +1384,8 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 
 // REQUIRES: mutex_ is held
 // REQUIRES: this thread is currently at the front of the writer queue
-// 写入之前检查 MemTable，检查ImMemTable, 是否 Compacttion
+// 写入之前检查 MemTable，检查ImMemTable, 是否需要 Compacttion
+// TODO 重要
 Status DBImpl::MakeRoomForWrite(bool force) {
   mutex_.AssertHeld();  // 必须持有锁
   assert(!writers_.empty());  // 任务队列不为空

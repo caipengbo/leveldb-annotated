@@ -143,6 +143,7 @@ class DBImpl : public DB {
   void BackgroundCompaction() EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   void CleanupCompaction(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  // 根据 CompactionState进行实际的(Major)Compaction
   Status DoCompactionWork(CompactionState* compact)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 

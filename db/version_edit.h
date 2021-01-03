@@ -98,6 +98,7 @@ class VersionEdit {
 
   std::vector<std::pair<int, InternalKey>> compact_pointers_;
   DeletedFileSet deleted_files_;
+  // 记录文件的层级
   std::vector<std::pair<int, FileMetaData>> new_files_;
 };
 
