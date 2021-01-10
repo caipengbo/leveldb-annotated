@@ -72,6 +72,7 @@ Version::~Version() {
   next_->prev_ = prev_;
 
   // Drop references to files
+  // 当一个Version生命周期结束，它管理的所有文件的引用计数减1
   for (int level = 0; level < config::kNumLevels; level++) {
     for (size_t i = 0; i < files_[level].size(); i++) {
       FileMetaData* f = files_[level][i];
@@ -588,6 +589,7 @@ class VersionSet::Builder {
   };
 
   typedef std::set<FileMetaData*, BySmallestKey> FileSet;
+  // State指的是 删除的文件和添加的文件
   struct LevelState {
     std::set<uint64_t> deleted_files;
     FileSet* added_files;
@@ -630,6 +632,7 @@ class VersionSet::Builder {
   }
 
   // Apply all of the edits in *edit to the current state.
+  // 将版本与版本的变化部分VersionEdit 记录在Builder
   void Apply(VersionEdit* edit) {
     // Update compaction pointers
     for (size_t i = 0; i < edit->compact_pointers_.size(); i++) {
@@ -639,6 +642,7 @@ class VersionSet::Builder {
     }
 
     // Delete files
+    //将删除部分的文件，包括文件所属的层级，记录在Builder的数据结构中删除的文件，只需要记录sstable文件的数字就可以了
     for (const auto& deleted_file_set_kvp : edit->deleted_files_) {
       const int level = deleted_file_set_kvp.first;
       const uint64_t number = deleted_file_set_kvp.second;
@@ -646,6 +650,7 @@ class VersionSet::Builder {
     }
 
     // Add new files
+    // 处理新增文件部分，要将VersionEdit中的增加文件部分的整个FileMetaData都记录下来
     for (size_t i = 0; i < edit->new_files_.size(); i++) {
       const int level = edit->new_files_[i].first;
       FileMetaData* f = new FileMetaData(edit->new_files_[i].second);
@@ -673,6 +678,8 @@ class VersionSet::Builder {
   }
 
   // Save the current state in *v.
+  // 这一部分是根据Builder中的base_指向的当前版本current_, 以及在Apply部分记录的
+  // 删除文件集合，新增文件集合和CompactionPointer集合，计算出一个新的Verison，保存在v中
   void SaveTo(Version* v) {
     BySmallestKey cmp;
     cmp.internal_comparator = &vset_->icmp_;
@@ -722,7 +729,8 @@ class VersionSet::Builder {
     if (levels_[level].deleted_files.count(f->number) > 0) {
       // File is deleted: do nothing
     } else {
-      std::vector<FileMetaData*>* files = &v->files_[level];
+      // 将文件加入到新version v的files_中
+      std::vector<FileMetaData*>* files = &v->files_[level];  // 注意取的是地址哦
       if (level > 0 && !files->empty()) {
         // Must not overlap
         assert(vset_->icmp_.Compare((*files)[files->size() - 1]->largest,
@@ -751,6 +759,8 @@ VersionSet::VersionSet(const std::string& dbname, const Options* options,
       descriptor_log_(nullptr),
       dummy_versions_(this),
       current_(nullptr) {
+  // 注意会默认执行一次AppendVersion
+  // 注释掉之后会导致TEST_F(DBTest, Empty) 测试用例执行不过去
   AppendVersion(new Version(this));
 }
 
@@ -778,7 +788,9 @@ void VersionSet::AppendVersion(Version* v) {
   v->next_->prev_ = v;
 }
 
+// VersionEdit + OldVersion -> NewVersion
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
+
   if (edit->has_log_number_) {
     assert(edit->log_number_ >= log_number_);
     assert(edit->log_number_ < next_file_number_);
@@ -799,12 +811,14 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     builder.Apply(edit);
     builder.SaveTo(v);
   }
+  // 计算 Compaction score
   Finalize(v);
 
   // Initialize new descriptor log file if necessary by creating
   // a temporary file that contains a snapshot of the current version.
   std::string new_manifest_file;
   Status s;
+  // 第一次写MANIFEST
   if (descriptor_log_ == nullptr) {
     // No reason to unlock *mu here since we only hit this path in the
     // first call to LogAndApply (when opening the database).
@@ -818,6 +832,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
     }
   }
 
+  // 不是第一次写
   // Unlock during expensive MANIFEST log write
   {
     mu->Unlock();
@@ -834,7 +849,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
         Log(options_->info_log, "MANIFEST write: %s\n", s.ToString().c_str());
       }
     }
-
+    // 设置 CURRENT 文件
     // If we just created a new descriptor file, install it by writing a
     // new CURRENT file that points to it.
     if (s.ok() && !new_manifest_file.empty()) {
@@ -863,6 +878,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   return s;
 }
 
+// 启动LevelDB时恢复Version
 Status VersionSet::Recover(bool* save_manifest) {
   struct LogReporter : public log::Reader::Reporter {
     Status* status;
@@ -1254,6 +1270,15 @@ Iterator* VersionSet::MakeInputIterator(Compaction* c) {
 }
 
 // 构建Compaction（寻找需要Compact的level和sstable）
+// leveldb首先从当前的versions中选择一个最适合进行compaction的level，
+// 这里的最适合主要是通过版本控制里面的compaction_score_变量进行衡量，
+// 同时每个版本都会有一个变量跟踪当前版本中最适合进行compaction
+// 的level(current_->compaction_level_)。除此之外，leveldb为
+// 每个level中的文件维持一个 数组compact_pointer_，
+// 这个compact_pointer_[level]指向当前level中上次被compaction的最大key的值，
+// 因此下次对这个level进行compaction时，就要从key大于compact_pointer_[level]
+// 的文件开始，而且我们可以看到，通常是选择第一个largest key大于
+// compact_pointer_[level]的文件作为当前level需要进行compaction的文件
 Compaction* VersionSet::PickCompaction() {
   Compaction* c;
   int level;

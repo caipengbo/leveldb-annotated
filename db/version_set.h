@@ -151,15 +151,18 @@ class Version {
   int refs_;          // Number of live refs to this version
 
   // List of files per level
+  // 记录每一层SSTable的元数据（FileMetaData）
   std::vector<FileMetaData*> files_[config::kNumLevels];
 
   // Next file to compact based on seek stats.
+  // 根据Seek信息，记录下一个需要被Compaction的文件
   FileMetaData* file_to_compact_;
   int file_to_compact_level_;
 
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by Finalize().
+  // 用于判断是否需要对此level进行Compaction
   double compaction_score_;
   int compaction_level_;
 };
@@ -298,7 +301,7 @@ class VersionSet {
   const Options* const options_;
   TableCache* const table_cache_;
   const InternalKeyComparator icmp_;
-  uint64_t next_file_number_;
+  uint64_t next_file_number_;  // 全局的文件编号分配
   uint64_t manifest_file_number_;
   uint64_t last_sequence_;
   uint64_t log_number_;
@@ -306,12 +309,16 @@ class VersionSet {
 
   // Opened lazily
   WritableFile* descriptor_file_;
+  // 用于写MANIFEST
   log::Writer* descriptor_log_;
   Version dummy_versions_;  // Head of circular doubly-linked list of versions.
   Version* current_;        // == dummy_versions_.prev_
 
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.
+  // compact_pointer_[level]指向当前level中上次被compaction的最大key的值，
+  // 下次对这个level进行compaction时，就要从key大于compact_pointer_[level]的文件开始，
+  // 通常是选择第一个largest key大于compact_pointer_[level]的文件作为当前level需要进行compaction的文件
   std::string compact_pointer_[config::kNumLevels];
 };
 

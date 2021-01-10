@@ -18,9 +18,9 @@ class VersionSet;
 struct FileMetaData {
   FileMetaData() : refs(0), allowed_seeks(1 << 30), file_size(0) {}
 
-  int refs;
+  int refs;  // 引用计数
   int allowed_seeks;  // Seeks allowed until compaction
-  uint64_t number;
+  uint64_t number;  // 文件编号，数字文件名
   uint64_t file_size;    // File size in bytes
   InternalKey smallest;  // Smallest internal key served by table
   InternalKey largest;   // Largest internal key served by table
@@ -85,7 +85,8 @@ class VersionEdit {
 
   typedef std::set<std::pair<int, uint64_t>> DeletedFileSet;
 
-  std::string comparator_;
+  // db一旦创建，排序的逻辑就必须保持兼容，不可变更，此时就用comparator做凭证。
+  std::string comparator_;  // 当前的key比较器名字
   uint64_t log_number_;
   uint64_t prev_log_number_;
   uint64_t next_file_number_;
@@ -96,9 +97,10 @@ class VersionEdit {
   bool has_next_file_number_;
   bool has_last_sequence_;
 
+  // 每个level层的compact pointer
   std::vector<std::pair<int, InternalKey>> compact_pointers_;
+  // 删除、添加的文件（level, FileMetaData）
   DeletedFileSet deleted_files_;
-  // 记录文件的层级
   std::vector<std::pair<int, FileMetaData>> new_files_;
 };
 
