@@ -69,6 +69,7 @@ std::string OldInfoLogFileName(const std::string& dbname) {
   return dbname + "/LOG.old";
 }
 
+// 解析文件名
 // Owned filenames have the form:
 //    dbname/CURRENT
 //    dbname/LOCK
