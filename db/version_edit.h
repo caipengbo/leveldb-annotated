@@ -87,6 +87,7 @@ class VersionEdit {
 
   // db一旦创建，排序的逻辑就必须保持兼容，不可变更，此时就用comparator做凭证。
   std::string comparator_;  // 当前的key比较器名字
+  // 用于清除过期的日志
   uint64_t log_number_;
   uint64_t prev_log_number_;
   uint64_t next_file_number_;

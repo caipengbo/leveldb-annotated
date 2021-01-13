@@ -70,7 +70,9 @@ void PutVarint64(std::string* dst, uint64_t v) {
 }
 
 void PutLengthPrefixedSlice(std::string* dst, const Slice& value) {
+  // 放 value 的 length
   PutVarint32(dst, value.size());
+  // 放 value 的 value
   dst->append(value.data(), value.size());
 }
 
@@ -156,7 +158,7 @@ bool GetLengthPrefixedSlice(Slice* input, Slice* result) {
   uint32_t len;
   if (GetVarint32(input, &len) && input->size() >= len) {
     *result = Slice(input->data(), len);
-    input->remove_prefix(len);
+    input->remove_prefix(len);  // 注意会去除掉len字节噢
     return true;
   } else {
     return false;

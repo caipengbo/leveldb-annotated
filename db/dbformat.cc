@@ -116,19 +116,22 @@ bool InternalFilterPolicy::KeyMayMatch(const Slice& key, const Slice& f) const {
 
 LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
   size_t usize = user_key.size();
-  size_t needed = usize + 13;  // A conservative estimate
+  size_t needed = usize + 13;  // A conservative estimate(保守的估计)
   char* dst;
   if (needed <= sizeof(space_)) {
     dst = space_;
   } else {
     dst = new char[needed];
   }
+  // 存size，start_指向起始位置
   start_ = dst;
   dst = EncodeVarint32(dst, usize + 8);
+  // kstart 指向user_key开始的位置
   kstart_ = dst;
   std::memcpy(dst, user_key.data(), usize);
   dst += usize;
   EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek));
+  // end_指向结束的位置
   dst += 8;
   end_ = dst;
 }

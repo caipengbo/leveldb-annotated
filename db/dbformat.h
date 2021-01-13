@@ -60,11 +60,15 @@ enum ValueType { kTypeDeletion = 0x0, kTypeValue = 0x1 };
 // ValueType, not the lowest).
 static const ValueType kValueTypeForSeek = kTypeValue;
 
+// leveldb 中的每次更新(put/delete)操作都拥有一个版本，由 SequnceNumber 来标识，
+// 整个 db 有一个 全局值保存着当前使用到的 SequnceNumber。
+// SequnceNumber 在 leveldb 有重要的地位，key 的排序， compact 以及 snapshot 都依赖于它。
+// 存储时，SequnceNumber 只占用 56 bits, ValueType 占用 8 bits，二者共同占用 64bits(uint64_t).
 typedef uint64_t SequenceNumber;
 
 // We leave eight bits empty at the bottom so a type and sequence#
 // can be packed together into 64-bits.
-static const SequenceNumber kMaxSequenceNumber = ((0x1ull << 56) - 1);
+static const SequenceNumber kMaxSequenceNumber = ((0x1ull << 56) - 1);  // 1 unsigned long long (64bits)
 
 struct ParsedInternalKey {
   Slice user_key;
@@ -142,6 +146,7 @@ class InternalKey {
   }
 
   bool DecodeFrom(const Slice& s) {
+    // 先将原字符串清空，然后赋予新的值作替换。
     rep_.assign(s.data(), s.size());
     return !rep_.empty();
   }
@@ -192,7 +197,7 @@ class LookupKey {
 
   ~LookupKey();
 
-  // Return a key suitable for lookup in a MemTable.
+  // Return a key suitable for(适合) lookup in a MemTable.
   Slice memtable_key() const { return Slice(start_, end_ - start_); }
 
   // Return an internal key (suitable for passing to an internal iterator)
@@ -203,12 +208,16 @@ class LookupKey {
 
  private:
   // We construct a char array of the form:
-  //    klength  varint32               <-- start_
-  //    userkey  char[klength]          <-- kstart_
-  //    tag      uint64
+  //  A: klength  varint32               <-- start_
+  //  B: userkey  char[klength]          <-- kstart_
+  //  C: tag      uint64
   //                                    <-- end_
   // The array is a suitable MemTable key.
   // The suffix starting with "userkey" can be used as an InternalKey.
+  // memtable_key = A + B + C
+  // internal_key = B + C
+  // user_key = B
+  // 维护三个指针用来指向特定种类的key
   const char* start_;
   const char* kstart_;
   const char* end_;

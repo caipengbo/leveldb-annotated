@@ -345,6 +345,7 @@ if(LEVELDB_BUILD_TESTS)
   leveldb_test("util/status_test.cc")
   leveldb_test("util/no_destructor_test.cc")
   leveldb_test("test/TestMain.cpp")
+  leveldb_test("test/slice_test.cpp")
 
   if(NOT BUILD_SHARED_LIBS)
     leveldb_test("db/autocompact_test.cc")

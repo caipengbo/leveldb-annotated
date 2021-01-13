@@ -53,6 +53,7 @@ bool Reader::SkipToInitialBlock() {
   return true;
 }
 
+// 日志Record必须符合要求，不然就是不完整的日志
 bool Reader::ReadRecord(Slice* record, std::string* scratch) {
   if (last_record_offset_ < initial_offset_) {
     if (!SkipToInitialBlock()) {
@@ -125,6 +126,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
           ReportCorruption(fragment.size(),
                            "missing start of fragmented record(1)");
         } else {
+          // 拼接record，临时记录在scratch中
           scratch->append(fragment.data(), fragment.size());
         }
         break;
@@ -135,6 +137,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
                            "missing start of fragmented record(2)");
         } else {
           scratch->append(fragment.data(), fragment.size());
+          // 将拼接后的记录记录到 record 中
           *record = Slice(*scratch);
           last_record_offset_ = prospective_record_offset;
           return true;
@@ -186,12 +189,15 @@ void Reader::ReportDrop(uint64_t bytes, const Status& reason) {
   }
 }
 
+//
 unsigned int Reader::ReadPhysicalRecord(Slice* result) {
   while (true) {
+    // buffer中的数据少于一个Block大小
     if (buffer_.size() < kHeaderSize) {
       if (!eof_) {
         // Last read was a full read, so this is a trailer to skip
         buffer_.clear();
+        // 为了提高读效率 每次读 KBlockSize（32KB） 到buffer
         Status status = file_->Read(kBlockSize, &buffer_, backing_store_);
         end_of_buffer_offset_ += buffer_.size();
         if (!status.ok()) {

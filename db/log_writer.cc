@@ -31,8 +31,8 @@ Writer::Writer(WritableFile* dest, uint64_t dest_length)
 
 Writer::~Writer() = default;
 
-// 添加日志记录，格式在log_format.h中定义
-// slice中的数据是日志的数据部分
+// 添加日志记录，格式在 log_format.h 中定义
+// 日志的数据部分 是 WriteBatchInternal::Contents(write_batch)
 Status Writer::AddRecord(const Slice& slice) {
   const char* ptr = slice.data();
   size_t left = slice.size();  // 字节数
@@ -75,15 +75,16 @@ Status Writer::AddRecord(const Slice& slice) {
     } else {
       type = kMiddleType;
     }
-
+    // 写入
     s = EmitPhysicalRecord(type, ptr, fragment_length);
+    // 计算还有多少数据
     ptr += fragment_length;  // 移动数据指针
     left -= fragment_length;  // 更新剩余数据大小
     begin = false;
   } while (s.ok() && left > 0);
   return s;
 }
-// 打包 Record
+// 将 一个 Record 写入文件（落盘）
 Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
                                   size_t length) {
   assert(length <= 0xffff);  // Must fit in two bytes

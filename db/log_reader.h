@@ -89,6 +89,7 @@ class Reader {
   Reporter* const reporter_;
   bool const checksum_;
   char* const backing_store_;
+  // 为了提高读效率 每次读 KBlockSize（32KB） 到buffer
   Slice buffer_;
   bool eof_;  // Last Read() indicated EOF by returning < kBlockSize
 

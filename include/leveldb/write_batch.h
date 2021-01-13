@@ -73,6 +73,7 @@ class LEVELDB_EXPORT WriteBatch {
   Status Iterate(Handler* handler) const;
 
  private:
+  //  WriteBatch 操作类
   friend class WriteBatchInternal;
 
   std::string rep_;  // See comment in write_batch.cc for the format of rep_

@@ -12,6 +12,7 @@ namespace leveldb {
 
 class MemTable;
 
+// 提供操作 WriteBatch 的静态方法，这些方法不想放到 WriteBatch 的接口之中，这些方法的实现在 write_batch.cc文件中
 // WriteBatchInternal provides static methods for manipulating a
 // WriteBatch that we don't want in the public WriteBatch interface.
 class WriteBatchInternal {

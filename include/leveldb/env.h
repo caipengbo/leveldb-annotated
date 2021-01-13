@@ -189,6 +189,7 @@ class LEVELDB_EXPORT Env {
   // REQUIRES: lock has not already been unlocked.
   virtual Status UnlockFile(FileLock* lock) = 0;
 
+  // 在后台线程(未指定的)中运行一次function，如果在同一个Env中有多个function同该方法进行运行，那么这些方法是多线程运行的，不是顺序运行的
   // Arrange to run "(*function)(arg)" once in a background thread.
   //
   // "function" may run in an unspecified thread.  Multiple functions
@@ -197,6 +198,7 @@ class LEVELDB_EXPORT Env {
   // serialized.
   virtual void Schedule(void (*function)(void* arg), void* arg) = 0;
 
+  // 启动一个线程，执行function，当function执行完毕后，该线程就被清除掉
   // Start a new thread, invoking "function(arg)" within the new thread.
   // When "function(arg)" returns, the thread will be destroyed.
   virtual void StartThread(void (*function)(void* arg), void* arg) = 0;

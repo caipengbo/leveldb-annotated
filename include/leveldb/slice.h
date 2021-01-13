@@ -11,6 +11,12 @@
 // external synchronization, but if any of the threads may call a
 // non-const method, all threads accessing the same Slice must use
 // external synchronization.
+// 为什么使用Slice而不使用char []或者string呢？有以下原因：
+//   1. 相对于拷贝string，拷贝Slice会轻量级很多，只需要拷贝指针和长度；
+//   2. char []无法保存二进制字节，而Slice则没有这个问题；
+//   3. Slice的底层可以是char，也可以是string;
+//   4. 多个Slice可以指向同一个字符串。
+//   5. 可以很方便的进行转换
 
 #ifndef STORAGE_LEVELDB_INCLUDE_SLICE_H_
 #define STORAGE_LEVELDB_INCLUDE_SLICE_H_
@@ -28,7 +34,7 @@ class LEVELDB_EXPORT Slice {
  public:
   // Create an empty slice.
   Slice() : data_(""), size_(0) {}
-
+  // 使用 赋值运算符 会调用相关的构造函数
   // Create a slice that refers to d[0,n-1].
   Slice(const char* d, size_t n) : data_(d), size_(n) {}
 
@@ -86,6 +92,7 @@ class LEVELDB_EXPORT Slice {
   }
 
  private:
+  // 仅保存了 指针 和 size
   const char* data_;
   size_t size_;
 };

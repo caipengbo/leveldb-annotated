@@ -11,7 +11,7 @@
 //    kTypeDeletion varstring
 // varstring :=
 //    len: varint32
-//    data: uint8[len]
+//    data: uint8[len]  ==  char[len]
 
 #include "leveldb/write_batch.h"
 
@@ -26,6 +26,7 @@ namespace leveldb {
 // WriteBatch header has an 8-byte sequence number followed by a 4-byte count.
 static const size_t kHeader = 12;
 
+// 默认调用 Clear，分配 12 byte
 WriteBatch::WriteBatch() { Clear(); }
 
 WriteBatch::~WriteBatch() = default;
@@ -34,11 +35,12 @@ WriteBatch::Handler::~Handler() = default;
 
 void WriteBatch::Clear() {
   rep_.clear();
-  rep_.resize(kHeader);
+  rep_.resize(kHeader);   // 默认分配 12 byte
 }
 
 size_t WriteBatch::ApproximateSize() const { return rep_.size(); }
 
+// 遍历WriteBatch的record，并通过 Handler 插入到Handler对应的数据结构中（Handler有不同的实现，可以插入到Memtable,插入到SSTable）
 Status WriteBatch::Iterate(Handler* handler) const {
   Slice input(rep_);
   if (input.size() < kHeader) {
@@ -95,13 +97,17 @@ void WriteBatchInternal::SetSequence(WriteBatch* b, SequenceNumber seq) {
   EncodeFixed64(&b->rep_[0], seq);
 }
 
+// 插入一个非 delete 类型的 record
+// ValueType(kTypeValue)  key_len  key_data  value_len  value_data
 void WriteBatch::Put(const Slice& key, const Slice& value) {
   WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
   rep_.push_back(static_cast<char>(kTypeValue));
-  PutLengthPrefixedSlice(&rep_, key);
-  PutLengthPrefixedSlice(&rep_, value);
+  PutLengthPrefixedSlice(&rep_, key);    // key_len      key_data
+  PutLengthPrefixedSlice(&rep_, value);  // value_len    value_data
 }
 
+// 插入一个 delete 类型的 record (无value部分)
+// ValueType(kTypeValue)  key_len  key_data
 void WriteBatch::Delete(const Slice& key) {
   WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
   rep_.push_back(static_cast<char>(kTypeDeletion));
@@ -141,6 +147,7 @@ void WriteBatchInternal::SetContents(WriteBatch* b, const Slice& contents) {
   b->rep_.assign(contents.data(), contents.size());
 }
 
+// 将src 追加到 dst 上
 void WriteBatchInternal::Append(WriteBatch* dst, const WriteBatch* src) {
   SetCount(dst, Count(dst) + Count(src));
   assert(src->rep_.size() >= kHeader);

@@ -76,6 +76,7 @@ class MemTable {
 
   typedef SkipList<const char*, KeyComparator> Table;
 
+  // 为了实现引用计数，只有Unref可以调用 delete
   ~MemTable();  // Private since only Unref() should be used to delete it
 
   KeyComparator comparator_;

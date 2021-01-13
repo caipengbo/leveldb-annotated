@@ -16,7 +16,6 @@ TEST(MainTest, HelloTest) {
   ASSERT_EQ(5, 5);
 }
 TEST(MainTest, TestLevelDB) {
-
   leveldb::DB *db;
   // DB的（设置）选项，还有 ReadOptions 和 WriteOptions
   leveldb::Options options;

@@ -90,7 +90,7 @@ Version::~Version() {
     }
   }
 }
-
+// level 0 以上进行 二分查找
 int FindFile(const InternalKeyComparator& icmp,
              const std::vector<FileMetaData*>& files, const Slice& key) {
   uint32_t left = 0;
@@ -285,11 +285,14 @@ static bool NewestFirst(FileMetaData* a, FileMetaData* b) {
   return a->number > b->number;
 }
 
+// 在每一层进行查找
 void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
                                  bool (*func)(void*, int, FileMetaData*)) {
   const Comparator* ucmp = vset_->icmp_.user_comparator();
 
   // Search level-0 in order from newest to oldest.
+  // 0层的文件比较特殊。由于0层的文件中可能存在key重合的情况，因此在0层中，
+  // 文件编号大的sstable优先查找。理由是文件编号较大的sstable中存储的总是最新的数据。
   std::vector<FileMetaData*> tmp;
   tmp.reserve(files_[0].size());
   for (uint32_t i = 0; i < files_[0].size(); i++) {
@@ -309,6 +312,8 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
   }
 
   // Search other levels.
+  // 非0层文件，一层中所有文件之间的key不重合，因此leveldb可以借助sstable的元数据
+  // （一个文件中最小与最大的key值）进行快速定位，每一层只需要查找一个sstable文件的内容。
   for (int level = 1; level < config::kNumLevels; level++) {
     size_t num_files = files_[level].size();
     if (num_files == 0) continue;
@@ -328,6 +333,7 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
   }
 }
 
+// 从SSTable中查询
 Status Version::Get(const ReadOptions& options, const LookupKey& k,
                     std::string* value, GetStats* stats) {
   stats->seek_file = nullptr;

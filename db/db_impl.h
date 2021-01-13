@@ -178,8 +178,6 @@ class DBImpl : public DB {
   MemTable* mem_;
   MemTable* imm_ GUARDED_BY(mutex_);  // Memtable being compacted
   std::atomic<bool> has_imm_;         // So bg thread can detect non-null imm_
-  // 和 log_是绑定的，往log_中写数据，会往logfile中写数据，然后flush进磁盘，
-  // 当 Minor Compaction成功之后, 当前 logfile_会被删除，再创建一个logfile_
   WritableFile* logfile_;
   uint64_t logfile_number_ GUARDED_BY(mutex_);
   log::Writer* log_;
