@@ -53,7 +53,7 @@ bool Reader::SkipToInitialBlock() {
   return true;
 }
 
-// 日志Record必须符合要求，不然就是不完整的日志
+// 日志Record必须符合要求，不然就是不完整的日志，会有
 bool Reader::ReadRecord(Slice* record, std::string* scratch) {
   if (last_record_offset_ < initial_offset_) {
     if (!SkipToInitialBlock()) {
@@ -70,6 +70,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
 
   Slice fragment;
   while (true) {
+    // 读取一个Record
     const unsigned int record_type = ReadPhysicalRecord(&fragment);
 
     // ReadPhysicalRecord may have only had an empty trailer remaining in its
@@ -189,10 +190,10 @@ void Reader::ReportDrop(uint64_t bytes, const Status& reason) {
   }
 }
 
-//
+// 从文件中读取Record，为了提高效率，不是每次都读文件，而是每次读 一个 Block（32KB）的数据
 unsigned int Reader::ReadPhysicalRecord(Slice* result) {
   while (true) {
-    // buffer中的数据少于一个Block大小
+    // buffer 中的数据小于7（没有Record记录），重新读一个Block的数据到buffer
     if (buffer_.size() < kHeaderSize) {
       if (!eof_) {
         // Last read was a full read, so this is a trailer to skip
@@ -213,7 +214,7 @@ unsigned int Reader::ReadPhysicalRecord(Slice* result) {
         // Note that if buffer_ is non-empty, we have a truncated header at the
         // end of the file, which can be caused by the writer crashing in the
         // middle of writing the header. Instead of considering this an error,
-        // just report EOF.
+        // just report EOF.  写header的中间出错了
         buffer_.clear();
         return kEof;
       }
@@ -270,7 +271,7 @@ unsigned int Reader::ReadPhysicalRecord(Slice* result) {
       result->clear();
       return kBadRecord;
     }
-
+    // Record正确，
     *result = Slice(header + kHeaderSize, length);
     return type;
   }

@@ -115,6 +115,7 @@ Options SanitizeOptions(const std::string& dbname,
     }
   }
   if (result.block_cache == nullptr) {
+    // 设置的 Block Cache
     result.block_cache = NewLRUCache(8 << 20);
   }
   return result;
@@ -582,7 +583,7 @@ void DBImpl::CompactMemTable() {
   // Replace immutable memtable with the generated Table
   if (s.ok()) {
     edit.SetPrevLogNumber(0);
-    // 已经炉盘，更新edit d log number，旧的日志则会被清楚
+    // 落盘成功，更新edit d log number，这样旧的日志则会被清楚
     edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
     // 进行了Minor Compaction，所以要生成新的Version
     s = versions_->LogAndApply(&edit, &mutex_);

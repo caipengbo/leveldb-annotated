@@ -31,27 +31,30 @@ Writer::Writer(WritableFile* dest, uint64_t dest_length)
 
 Writer::~Writer() = default;
 
-// 添加日志记录，格式在 log_format.h 中定义
-// 日志的数据部分 是 WriteBatchInternal::Contents(write_batch)
+// 若一条记录较大，则可能会分成几个chunk存储在若干个block中
+// 日志的数据部分(也就是本函数的参数 slice ) 是 WriteBatchInternal::Contents(write_batch)
 Status Writer::AddRecord(const Slice& slice) {
   const char* ptr = slice.data();
-  size_t left = slice.size();  // 字节数
+  size_t left = slice.size();  // 数据部分的字节数
 
   // Fragment the record if necessary and emit it.  Note that if slice
   // is empty, we still want to iterate once to emit a single
   // zero-length record
   Status s;
   bool begin = true;
+  // 一个Block中可以有多个Record
   do {
     // 当前block的剩余空间
     const int leftover = kBlockSize - block_offset_;
     assert(leftover >= 0);
+    // Block 剩余空间 少于 head size，开辟一个新的 block
     if (leftover < kHeaderSize) {
       // Switch to a new block
       if (leftover > 0) {
         // Fill the trailer (literal below relies on kHeaderSize being 7)
         static_assert(kHeaderSize == 7, "");
-        dest_->Append(Slice("\x00\x00\x00\x00\x00\x00", leftover));
+        // 最多放6个, 最后要放 leftover 个 \x00
+        dest_->Append(Slice("\x00\x00\x00\x00\x00\x00", leftover));  // padding 对齐
       }
       block_offset_ = 0;
     }
@@ -59,12 +62,13 @@ Status Writer::AddRecord(const Slice& slice) {
     // Invariant: we never leave < kHeaderSize bytes in a block.
     assert(kBlockSize - block_offset_ - kHeaderSize >= 0);
 
-    // 剩余的数据
+    // 当前Block剩余的空间
     const size_t avail = kBlockSize - block_offset_ - kHeaderSize;
-    // 计算每次写入的 fragment 大小
+    // 本次能写入的数据
     const size_t fragment_length = (left < avail) ? left : avail;
 
     RecordType type;
+    // 数据能否在 本Block 中放完
     const bool end = (left == fragment_length);
     if (begin && end) {
       type = kFullType;
@@ -75,7 +79,7 @@ Status Writer::AddRecord(const Slice& slice) {
     } else {
       type = kMiddleType;
     }
-    // 写入
+    // 向文件中写入一个Record
     s = EmitPhysicalRecord(type, ptr, fragment_length);
     // 计算还有多少数据
     ptr += fragment_length;  // 移动数据指针
@@ -84,7 +88,9 @@ Status Writer::AddRecord(const Slice& slice) {
   } while (s.ok() && left > 0);
   return s;
 }
-// 将 一个 Record 写入文件（落盘）
+// 将 一个 Chunk(Record根据Block进行切分的) 写入文件（落盘）
+// 改名 EmitPhysicalChunk 更合适
+// 格式在 log_format.h 中定义
 Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
                                   size_t length) {
   assert(length <= 0xffff);  // Must fit in two bytes
@@ -106,7 +112,7 @@ Status Writer::EmitPhysicalRecord(RecordType t, const char* ptr,
   EncodeFixed32(buf, crc);
 
   // Write the header and the payload
-  Status s = dest_->Append(Slice(buf, kHeaderSize));  // 写入 record 头
+  Status s = dest_->Append(Slice(buf, kHeaderSize));  // 写入 record Header
   if (s.ok()) {
     s = dest_->Append(Slice(ptr, length));  // 写入 record Data
     if (s.ok()) {

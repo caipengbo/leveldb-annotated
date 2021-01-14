@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "gtest/gtest.h"
+#include "leveldb/cache.h"
 #include "util/coding.h"
 
 namespace leveldb {
@@ -220,6 +221,17 @@ TEST_F(CacheTest, ZeroSizeCache) {
   Insert(1, 100);
   ASSERT_EQ(-1, Lookup(1));
 }
+
+// 测试 memset(By Myth)
+struct LRUHandle;
+TEST_F(CacheTest, MyTest) {
+  uint32_t new_length = 4;
+  LRUHandle** new_list = new LRUHandle*[new_length];
+  memset(new_list, 1, sizeof(new_list[0]) * new_length);
+  ASSERT_TRUE(new_list[0] == nullptr);
+  ASSERT_FALSE(new_list[3] == nullptr);
+}
+
 
 }  // namespace leveldb
 

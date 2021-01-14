@@ -817,6 +817,7 @@ void VersionSet::AppendVersion(Version* v) {
 // VersionEdit + OldVersion -> NewVersion
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
 
+  // 更新 log_number
   if (edit->has_log_number_) {
     assert(edit->log_number_ >= log_number_);
     assert(edit->log_number_ < next_file_number_);

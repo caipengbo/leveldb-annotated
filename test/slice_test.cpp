@@ -46,8 +46,8 @@ class Slice {
 };
 
 TEST(SliceTest, TEST1) {
-  string str = "1234";
-  Slice s = str;
+  Slice s = Slice("\x00\x00\x00\x00\x00\x00", 4);
+
   cout << s.data() << endl;
 //  ASSERT_EQ(5, 5);
 }

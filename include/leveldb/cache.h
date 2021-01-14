@@ -11,7 +11,9 @@
 // the string.
 // LRU策略
 // A builtin cache implementation with a least-recently-used eviction
-// policy is provided.  Clients may use their own implementations if
+// policy is provided.
+//
+// Clients may use their own implementations if
 // they want something more sophisticated (like scan-resistance, a
 // custom eviction policy, variable cache sizing, etc.)
 
@@ -98,7 +100,6 @@ class LEVELDB_EXPORT Cache {
   // cache.
   virtual size_t TotalCharge() const = 0;
 
-//  TODO: 做什么的？
  private:
   void LRU_Remove(Handle* e);
   void LRU_Append(Handle* e);
