@@ -15,7 +15,6 @@ namespace {
 
 typedef Iterator* (*BlockFunction)(void*, const ReadOptions&, const Slice&);
 
-// 用于归并
 class TwoLevelIterator : public Iterator {
  public:
   TwoLevelIterator(Iterator* index_iter, BlockFunction block_function,
@@ -58,6 +57,7 @@ class TwoLevelIterator : public Iterator {
   void SetDataIterator(Iterator* data_iter);
   void InitDataBlock();
 
+  // index data 通过 block_function_ 生成 data iterator
   BlockFunction block_function_;
   void* arg_;
   const ReadOptions options_;
@@ -66,6 +66,7 @@ class TwoLevelIterator : public Iterator {
   IteratorWrapper data_iter_;  // May be nullptr
   // If data_iter_ is non-null, then "data_block_handle_" holds the
   // "index_value" passed to block_function_ to create the data_iter_.
+  // 通过 index 数据，获得对应的 data
   std::string data_block_handle_;
 };
 

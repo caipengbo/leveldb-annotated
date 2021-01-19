@@ -1157,6 +1157,7 @@ static void CleanupIteratorState(void* arg1, void* arg2) {
 
 }  // anonymous namespace
 
+// Leveldb使用MergingIterator将Memtable，Immutable memtable及各层SST文件的Iterator归并起来
 Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
                                       SequenceNumber* latest_snapshot,
                                       uint32_t* seed) {
@@ -1196,6 +1197,7 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
 }
 
 // 读
+// DBImpl::Get()->Version::Get()->TableCache::Get()->TableCache::FindTable()->Table::Open()
 Status DBImpl::Get(const ReadOptions& options, const Slice& key,
                    std::string* value) {
   Status s;
@@ -1233,7 +1235,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
       // Done
       // 从 Immutable Memtable 中查找
     } else {
-      // 从 SSTable 查找
+      // 从 SSTable 查找（也查找通过TableCache）
       s = current->Get(options, lkey, value, &stats);
       have_stat_update = true;
     }

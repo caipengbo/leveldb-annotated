@@ -56,7 +56,7 @@ class LEVELDB_EXPORT Cache {
   // longer needed.
   //
   // When the inserted entry is no longer needed, the key and
-  // value will be passed to "deleter".
+  // value will be passed to "deleter". 当插入的entry不再使用的时候，调用deleter回调函数释放该entry
   virtual Handle* Insert(const Slice& key, void* value, size_t charge,
                          void (*deleter)(const Slice& key, void* value)) = 0;
 
@@ -89,11 +89,12 @@ class LEVELDB_EXPORT Cache {
   // its cache keys.
   virtual uint64_t NewId() = 0;
 
+  // 移出掉所有不在 in use 的Cache
   // Remove all cache entries that are not actively in use.  Memory-constrained
   // applications may wish to call this method to reduce memory usage.
   // Default implementation of Prune() does nothing.  Subclasses are strongly
-  // encouraged to override the default implementation.  A future release of
-  // leveldb may change Prune() to a pure abstract method.
+  // encouraged to override the default implementation.
+  // A future release of leveldb may change Prune() to a pure abstract method.
   virtual void Prune() {}
 
   // Return an estimate of the combined charges of all elements stored in the

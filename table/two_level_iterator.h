@@ -20,6 +20,8 @@ struct ReadOptions;
 //
 // Uses a supplied function to convert an index_iter value into
 // an iterator over the contents of the corresponding block.
+// index_iter是index iterator, 所有操作先通过key获得index data，
+// 然后通过block_function解析index data并生成data iterator
 Iterator* NewTwoLevelIterator(
     Iterator* index_iter,
     Iterator* (*block_function)(void* arg, const ReadOptions& options,

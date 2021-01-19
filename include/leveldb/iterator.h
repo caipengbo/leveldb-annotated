@@ -7,6 +7,7 @@
 // are provided by this library.  In particular, iterators are provided
 // to access the contents of a Table or a DB.
 //
+// const方法不需要外部锁，非const方法需要
 // Multiple threads can invoke const methods on an Iterator without
 // external synchronization, but if any of the threads may call a
 // non-const method, all threads accessing the same Iterator must use
@@ -81,6 +82,7 @@ class LEVELDB_EXPORT Iterator {
   void RegisterCleanup(CleanupFunction function, void* arg1, void* arg2);
 
  private:
+  // Cleanup functions存储在单链表中
   // Cleanup functions are stored in a single-linked list.
   // The list's head node is inlined in the iterator.
   struct CleanupNode {

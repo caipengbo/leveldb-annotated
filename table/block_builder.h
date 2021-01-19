@@ -37,7 +37,7 @@ class BlockBuilder {
   // we are building.
   size_t CurrentSizeEstimate() const;
 
-  // Return true iff no entries have been added since the last Reset()
+  // Return true iff(当且仅当) no entries have been added since the last Reset()
   bool empty() const { return buffer_.empty(); }
 
  private:
@@ -46,7 +46,7 @@ class BlockBuilder {
   std::vector<uint32_t> restarts_;  // Restart points
   int counter_;                     // Number of entries emitted since restart
   bool finished_;                   // Has Finish() been called?
-  std::string last_key_;
+  std::string last_key_;            // 上一个key(完整的)
 };
 
 }  // namespace leveldb

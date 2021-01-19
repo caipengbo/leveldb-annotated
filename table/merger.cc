@@ -28,6 +28,7 @@ class MergingIterator : public Iterator {
 
   bool Valid() const override { return (current_ != nullptr); }
 
+  // 所有的 child iterator 都移动到first
   void SeekToFirst() override {
     for (int i = 0; i < n_; i++) {
       children_[i].SeekToFirst();
@@ -43,7 +44,7 @@ class MergingIterator : public Iterator {
     FindLargest();
     direction_ = kReverse;
   }
-
+  // 子iterator都进行Seek，选择key最小的那个（第一个出现的那个）
   void Seek(const Slice& target) override {
     for (int i = 0; i < n_; i++) {
       children_[i].Seek(target);
@@ -60,6 +61,7 @@ class MergingIterator : public Iterator {
     // true for all of the non-current_ children since current_ is
     // the smallest child and key() == current_->key().  Otherwise,
     // we explicitly position the non-current_ children.
+    // 确保所有的子iterator都是key()的Next
     if (direction_ != kForward) {
       for (int i = 0; i < n_; i++) {
         IteratorWrapper* child = &children_[i];
@@ -106,12 +108,12 @@ class MergingIterator : public Iterator {
     current_->Prev();
     FindLargest();
   }
-
+  // current_指向的key
   Slice key() const override {
     assert(Valid());
     return current_->key();
   }
-
+  // current_指向的value
   Slice value() const override {
     assert(Valid());
     return current_->value();
@@ -141,10 +143,12 @@ class MergingIterator : public Iterator {
   const Comparator* comparator_;
   IteratorWrapper* children_;
   int n_;
+  // 记录当前指向的 子iterator
   IteratorWrapper* current_;
   Direction direction_;
 };
 
+// 比较当前所有 child iterator 所指的位置，将current_置为 key 最小的那个iterator(如果重复，就选第一个出现的那个)
 void MergingIterator::FindSmallest() {
   IteratorWrapper* smallest = nullptr;
   for (int i = 0; i < n_; i++) {

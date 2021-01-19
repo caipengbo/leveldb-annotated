@@ -90,7 +90,7 @@ Status TableBuilder::ChangeOptions(const Options& options) {
   rep_->index_block_options.block_restart_interval = 1;
   return Status::OK();
 }
-
+// 加入KV数据（Filter Block 和 Data Block ）
 void TableBuilder::Add(const Slice& key, const Slice& value) {
   Rep* r = rep_;
   assert(!r->closed);
@@ -120,14 +120,16 @@ void TableBuilder::Add(const Slice& key, const Slice& value) {
 
   r->last_key.assign(key.data(), key.size());
   r->num_entries++;
+  // 加入 data block
   r->data_block.Add(key, value);
 
   const size_t estimated_block_size = r->data_block.CurrentSizeEstimate();
+  // Block 尺寸达到 block_size 落盘
   if (estimated_block_size >= r->options.block_size) {
     Flush();
   }
 }
-
+// 文件Flush
 void TableBuilder::Flush() {
   Rep* r = rep_;
   assert(!r->closed);
@@ -144,7 +146,8 @@ void TableBuilder::Flush() {
     r->filter_block->StartBlock(r->offset);
   }
 }
-
+// 写入Block，
+// Block包括：meta block(filter block)、meta index block、index block这几种
 void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
   // File format contains a sequence of blocks where each block has:
   //    block_data: uint8[n]
@@ -207,7 +210,9 @@ void TableBuilder::WriteRawBlock(const Slice& block_contents,
 
 Status TableBuilder::status() const { return rep_->status; }
 
-// 当前sstable结束
+// 当前sstable结束，拼接Block 和 Footer
+// 在 data block的后面追加上 meta block(filter block)、meta index block、index block、footer
+//  meta block(filter block)、meta index block、index block
 Status TableBuilder::Finish() {
   Rep* r = rep_;
   // 调用Flush，最后一个data_block追加（落盘）完毕
@@ -224,7 +229,7 @@ Status TableBuilder::Finish() {
                   &filter_block_handle);
   }
 
-  // Write metaindex block
+  // Write meta index block
   // meta index block中（Entry的value部分）存储的是
   // filter block的索引信息（BlockHandle数据，在sstable文件中的偏移量以及数据长度）
   if (ok()) {

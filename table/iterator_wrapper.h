@@ -14,6 +14,7 @@ namespace leveldb {
 // caches the valid() and key() results for an underlying iterator.
 // This can help avoid virtual function calls and also gives better
 // cache locality.
+// 对Iterator提供了一个简单的包装，缓存了 valid()和key(), 避免每次都调用虚函数
 class IteratorWrapper {
  public:
   IteratorWrapper() : iter_(nullptr), valid_(false) {}
@@ -21,8 +22,7 @@ class IteratorWrapper {
   ~IteratorWrapper() { delete iter_; }
   Iterator* iter() const { return iter_; }
 
-  // Takes ownership of "iter" and will delete it when destroyed, or
-  // when Set() is invoked again.
+  // Takes ownership of "iter" and will delete it when destroyed, or when Set() is invoked again.
   void Set(Iterator* iter) {
     delete iter_;
     iter_ = iter;

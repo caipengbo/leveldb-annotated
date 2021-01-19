@@ -2,23 +2,27 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 //
+// 产生 Block
 // BlockBuilder generates blocks where keys are prefix-compressed:
 //
 // When we store a key, we drop the prefix shared with the previous
 // string.  This helps reduce the space requirement significantly.
+//
 // Furthermore, once every K keys, we do not apply the prefix
 // compression and store the entire key.  We call this a "restart
-// point".  The tail end of the block stores the offsets of all of the
+// point".
+//
+// The tail end of the block stores the offsets of all of the
 // restart points, and can be used to do a binary search when looking
 // for a particular key.  Values are stored as-is (without compression)
 // immediately following the corresponding key.
 //
 // An entry for a particular key-value pair has the form:
-//     shared_bytes: varint32
-//     unshared_bytes: varint32
-//     value_length: varint32
-//     key_delta: char[unshared_bytes]
-//     value: char[value_length]
+//     shared_bytes: varint32  与前一条记录key共享部分的长度
+//     unshared_bytes: varint32  与前一条记录key不共享部分的长度
+//     value_length: varint32  value长度
+//     key_delta: char[unshared_bytes]  与前一条记录key非共享的内容
+//     value: char[value_length]  value的值
 // shared_bytes == 0 for restart points.
 //
 // The trailer of the block has the form:
@@ -58,6 +62,8 @@ size_t BlockBuilder::CurrentSizeEstimate() const {
           sizeof(uint32_t));                     // Restart array length
 }
 
+// 完成一个 Data Block
+// 按照datablock的格式将restarts和num_restart拼接到buffer后面
 Slice BlockBuilder::Finish() {
   // Append restart array
   for (size_t i = 0; i < restarts_.size(); i++) {
@@ -68,6 +74,7 @@ Slice BlockBuilder::Finish() {
   return Slice(buffer_);
 }
 
+// 添加一个KV数据，上层保证 Key 有序且递增
 void BlockBuilder::Add(const Slice& key, const Slice& value) {
   Slice last_key_piece(last_key_);
   assert(!finished_);
@@ -94,11 +101,13 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   PutVarint32(&buffer_, value.size());
 
   // Add string delta to buffer_ followed by value
-  buffer_.append(key.data() + shared, non_shared);
-  buffer_.append(value.data(), value.size());
+  // key.data()是指针，加上一个int进行指针的移动
+  buffer_.append(key.data() + shared, non_shared); // 加入 key_delta
+  buffer_.append(value.data(), value.size()); // 加入 value
 
   // Update state
   last_key_.resize(shared);
+
   last_key_.append(key.data() + shared, non_shared);
   assert(Slice(last_key_) == key);
   counter_++;

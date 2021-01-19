@@ -90,7 +90,7 @@ Version::~Version() {
     }
   }
 }
-// level 0 以上进行 二分查找
+// 非level0文件进行 二分查找
 int FindFile(const InternalKeyComparator& icmp,
              const std::vector<FileMetaData*>& files, const Slice& key) {
   uint32_t left = 0;
@@ -163,10 +163,11 @@ bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
 }
 
 // An internal iterator.  For a given version/level pair, yields
-// information about the files in the level.  For a given entry, key()
-// is the largest key that occurs in the file, and value() is an
-// 16-byte value containing the file number and file size, both
-// encoded using EncodeFixed64.
+// information about the files in the level.
+// For a given entry,
+// - key() is the largest key that occurs in the file
+// - value() is an 16-byte value containing the file number and file size, both encoded using EncodeFixed64.
+// 文件最大key - FileMetaData(文件号|文件长度)
 class Version::LevelFileNumIterator : public Iterator {
  public:
   LevelFileNumIterator(const InternalKeyComparator& icmp,
@@ -233,6 +234,7 @@ Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
       vset_->table_cache_, options);
 }
 
+// 将TableCache的Iterator加入到iters中
 void Version::AddIterators(const ReadOptions& options,
                            std::vector<Iterator*>* iters) {
   // Merge all level zero files together since they may overlap
@@ -333,7 +335,8 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
   }
 }
 
-// 从SSTable中查询
+// 从SSTable中查询(经过TableCache)
+// Version::Get()->TableCache::Get()->TableCache::FindTable()->Table::Open()
 Status Version::Get(const ReadOptions& options, const LookupKey& k,
                     std::string* value, GetStats* stats) {
   stats->seek_file = nullptr;
