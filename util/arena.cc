@@ -6,6 +6,7 @@
 
 namespace leveldb {
 
+// 默认申请 4k内存
 static const int kBlockSize = 4096;
 
 Arena::Arena()
@@ -18,6 +19,7 @@ Arena::~Arena() {
 }
 
 char* Arena::AllocateFallback(size_t bytes) {
+  // 超过1/4，当前默认是超过1K时，独自去分配一个Block，避免浪费
   if (bytes > kBlockSize / 4) {
     // Object is more than a quarter of our block size.  Allocate it separately
     // to avoid wasting too much space in leftover bytes.
@@ -26,6 +28,7 @@ char* Arena::AllocateFallback(size_t bytes) {
   }
 
   // We waste the remaining space in the current block.
+  // 重置状态信息, 上一个Block余下的空间将被浪费
   alloc_ptr_ = AllocateNewBlock(kBlockSize);
   alloc_bytes_remaining_ = kBlockSize;
 
@@ -35,6 +38,7 @@ char* Arena::AllocateFallback(size_t bytes) {
   return result;
 }
 
+// 分配对齐的内存
 char* Arena::AllocateAligned(size_t bytes) {
   const int align = (sizeof(void*) > 8) ? sizeof(void*) : 8;
   static_assert((align & (align - 1)) == 0,
@@ -55,6 +59,7 @@ char* Arena::AllocateAligned(size_t bytes) {
   return result;
 }
 
+// 申请一个新的Block
 char* Arena::AllocateNewBlock(size_t block_bytes) {
   char* result = new char[block_bytes];
   blocks_.push_back(result);

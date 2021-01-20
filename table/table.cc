@@ -27,6 +27,8 @@ struct Table::Rep {
   Options options;
   Status status;
   RandomAccessFile* file;
+  // 为什么要有cache_id ？
+  // 因为所有的Table都共用一个block_cache, 所以为了区分不同的table, 用 cache_id + block_offset 作为 block_cache的 Key
   uint64_t cache_id;
   FilterBlockReader* filter;
   const char* filter_data;
@@ -66,13 +68,13 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
   if (s.ok()) {
     // We've successfully read the footer and the index block: we're ready to serve requests.
     Block* index_block = new Block(index_block_contents);
-    // 为 Table 的 Rep 赋值
+    // 创建Rep，并为其赋值 为 Table 的 Rep 赋值
     Rep* rep = new Table::Rep;
-    rep->options = options;
+    rep->options = options;  // 注意 option 在Rep结构中是值，所以每个Table的Rep中都独立的保存了一份Option
     rep->file = file;
     rep->metaindex_handle = footer.metaindex_handle();
     rep->index_block = index_block;
-    // 分配 block cache 的 cache id
+    // 为当前Table分配 cache id（因为所有的Table共用一个Block Cache，为了区分不同的Table，为每个Table赋一个cache_id作为）
     rep->cache_id = (options.block_cache ? options.block_cache->NewId() : 0);
     rep->filter_data = nullptr;
     rep->filter = nullptr;

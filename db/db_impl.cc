@@ -115,8 +115,8 @@ Options SanitizeOptions(const std::string& dbname,
     }
   }
   if (result.block_cache == nullptr) {
-    // 设置的 Block Cache
-    result.block_cache = NewLRUCache(8 << 20);
+    // 设置的 Block Cache的大小
+    result.block_cache = NewLRUCache(8 << 20);  // 8M
   }
   return result;
 }

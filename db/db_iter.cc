@@ -170,7 +170,7 @@ void DBIter::Next() {
       return;
     }
   }
-
+  // 跳过之后重复或者删除的数据
   FindNextUserEntry(true, &saved_key_);
 }
 
@@ -178,21 +178,25 @@ void DBIter::FindNextUserEntry(bool skipping, std::string* skip) {
   // Loop until we hit an acceptable entry to yield
   assert(iter_->Valid());
   assert(direction_ == kForward);
+  // 遍历到相同或者删除的 key 要跳过
   do {
     ParsedInternalKey ikey;
+    // sequence_ 序号，判断是否小于可读seq
     if (ParseKey(&ikey) && ikey.sequence <= sequence_) {
       switch (ikey.type) {
         case kTypeDeletion:
           // Arrange to skip all upcoming entries for this key since
           // they are hidden by this deletion.
           SaveKey(ikey.user_key, skip);
+          // 继续找下一个
           skipping = true;
           break;
         case kTypeValue:
           if (skipping &&
               user_comparator_->Compare(ikey.user_key, *skip) <= 0) {
-            // Entry hidden
+            // Entry hidden  Skip
           } else {
+            // 已经找到下一个 User Entry
             valid_ = true;
             saved_key_.clear();
             return;

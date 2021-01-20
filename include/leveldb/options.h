@@ -92,6 +92,8 @@ struct LEVELDB_EXPORT Options {
   // If non-null, use the specified cache for blocks.
   // If null, leveldb will automatically create and use an 8MB internal cache.
   // 用户可以自定义 Block Cache（注意，无法自定义TableCache）
+  // Cache指针，也就是说，所有的Table共用一个block cache，那么如何区分不同的Table呢？
+  // 在Rep里面保存了一个cache id(作为Block Cache Key的一部分),用来区分不同的Table的cache
   Cache* block_cache = nullptr;
 
   // Approximate size of user data packed per block.  Note that the
