@@ -818,9 +818,10 @@ void VersionSet::AppendVersion(Version* v) {
 }
 
 // VersionEdit + OldVersion -> NewVersion
+// 将VersionEdit应用，生成新的Version
 Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
 
-  // 更新 log_number
+  // 更新 VersionEdit 的 log_number
   if (edit->has_log_number_) {
     assert(edit->log_number_ >= log_number_);
     assert(edit->log_number_ < next_file_number_);
@@ -908,7 +909,7 @@ Status VersionSet::LogAndApply(VersionEdit* edit, port::Mutex* mu) {
   return s;
 }
 
-// 启动LevelDB时恢复Version
+// 启动LevelDB时恢复Version，DBImpl::Recover会调用此函数
 Status VersionSet::Recover(bool* save_manifest) {
   struct LogReporter : public log::Reader::Reporter {
     Status* status;
@@ -918,6 +919,7 @@ Status VersionSet::Recover(bool* save_manifest) {
   };
 
   // Read "CURRENT" file, which contains a pointer to the current manifest file
+  // 读CURRENT中的内容，此内容就是当前MANIFEST的文件名
   std::string current;
   Status s = ReadFileToString(env_, CurrentFileName(dbname_), &current);
   if (!s.ok()) {
@@ -930,7 +932,7 @@ Status VersionSet::Recover(bool* save_manifest) {
 
   std::string dscname = dbname_ + "/" + current;
   SequentialFile* file;
-  // 打开manifest文件
+  // 打开MANIFEST文件
   s = env_->NewSequentialFile(dscname, &file);
   if (!s.ok()) {
     if (s.IsNotFound()) {
@@ -948,7 +950,7 @@ Status VersionSet::Recover(bool* save_manifest) {
   uint64_t last_sequence = 0;
   uint64_t log_number = 0;
   uint64_t prev_log_number = 0;
-  // 还是借助辅助类Builder，从manifest中生成VersionEdit，然后加入到当前version中
+  // 还是借助辅助类Builder，从MANIFEST中生成VersionEdit，然后加入到当前version中
   Builder builder(this, current_);
 
   {
@@ -959,7 +961,7 @@ Status VersionSet::Recover(bool* save_manifest) {
     Slice record;
     std::string scratch;
     while (reader.ReadRecord(&record, &scratch) && s.ok()) {
-      // 读取Manifest中的内容，组装成VersionEdit edit
+      // 读取MANIFEST中的内容，组装成VersionEdit edit
       VersionEdit edit;
       s = edit.DecodeFrom(record);
       if (s.ok()) {
@@ -997,6 +999,7 @@ Status VersionSet::Recover(bool* save_manifest) {
       }
     }
   }
+  // 关闭文件指针
   delete file;
   file = nullptr;
 
@@ -1043,7 +1046,7 @@ Status VersionSet::Recover(bool* save_manifest) {
   return s;
 }
 
-// 判断是否需要重新生成Manifest文件
+// 判断是否需要重新生成MANIFEST文件，主要是检查当前MANIFEST文件大小是否过大
 bool VersionSet::ReuseManifest(const std::string& dscname,
                                const std::string& dscbase) {
   if (!options_->reuse_logs) {
@@ -1052,7 +1055,7 @@ bool VersionSet::ReuseManifest(const std::string& dscname,
   FileType manifest_type;
   uint64_t manifest_number;
   uint64_t manifest_size;
-  // 不重用manifest，使用新的Manifest文件
+  // 不重用MANIFEST，使用新的MANIFEST文件
   if (!ParseFileName(dscbase, &manifest_number, &manifest_type) ||
       manifest_type != kDescriptorFile ||
       !env_->GetFileSize(dscname, &manifest_size).ok() ||
@@ -1063,7 +1066,7 @@ bool VersionSet::ReuseManifest(const std::string& dscname,
   // 这个时候还没有调用其他函数，此时的descriptor_file_和descriptor_log_都应该为空
   assert(descriptor_file_ == nullptr);
   assert(descriptor_log_ == nullptr);
-  // 不创建的manifest文件，复用之前的manifest（通过文件名复用，使用原来的文件名，创建一个空的文件）
+  // 不创建的MANIFEST文件，复用之前的MANIFEST（通过文件名复用，使用原来的文件名，创建一个空的文件）
   Status r = env_->NewAppendableFile(dscname, &descriptor_file_);
   if (!r.ok()) {
     Log(options_->info_log, "Reuse MANIFEST: %s\n", r.ToString().c_str());
@@ -1216,6 +1219,7 @@ uint64_t VersionSet::ApproximateOffsetOf(Version* v, const InternalKey& ikey) {
   return result;
 }
 
+// 获取所有live 文件的file_number
 void VersionSet::AddLiveFiles(std::set<uint64_t>* live) {
   for (Version* v = dummy_versions_.next_; v != &dummy_versions_;
        v = v->next_) {

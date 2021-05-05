@@ -249,8 +249,7 @@ void DBImpl::RemoveObsoleteFiles() {
       switch (type) {
         // 过期的日志文件
         case kLogFile:
-          // 日志序号 大于当前 版本保存的日志序号
-          // 或者 等于之前的日志序号（保存两代日志）
+          // 保留：日志序号大于当前VersionSet保存的日志序号 或者 等于之前的日志序号（保存两代日志）
           keep = ((number >= versions_->LogNumber()) ||
                   (number == versions_->PrevLogNumber()));
           break;
@@ -294,7 +293,7 @@ void DBImpl::RemoveObsoleteFiles() {
   }
   mutex_.Lock();
 }
-
+// DBImpl::Open会调用此函数
 Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   mutex_.AssertHeld();
 
@@ -307,7 +306,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   if (!s.ok()) {
     return s;
   }
-
+  // 从CURRENT
   if (!env_->FileExists(CurrentFileName(dbname_))) {
     if (options_.create_if_missing) {
       s = NewDB();
@@ -324,14 +323,18 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
                                      "exists (error_if_exists is true)");
     }
   }
-
-  s = versions_->Recover(save_manifest);
+  // CURRENT存在，从MANIFEST中恢复Version信息
+  // save_manifest是个返回值，用来说明manifest是否生成成功
+  s = versions_->Recover(save_manifest);  // 会为VersionSet中的log_number_赋值
   if (!s.ok()) {
     return s;
   }
   SequenceNumber max_sequence(0);
 
-  // 以下注释说明恢复什么样子的日志文件
+  // 从WAL中恢复Memtabale
+  // 从新的WAL日志文件中恢复, 新的指的是还没有flush到磁盘上的内容的日志，这些日志
+  // filenumber大于MANIFEST中记录的log_number
+  // 注意，还保留了 pre_log_number, 也就是多保留了一个日志文件，便于从更老版本中恢复
   // Recover from all newer log files than the ones named in the
   // descriptor (new log files may have been added by the previous
   // incarnation without registering them in the descriptor).
@@ -339,7 +342,8 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   // Note that PrevLogNumber() is no longer used, but we pay
   // attention to it in case we are recovering a database
   // produced by an older version of leveldb.
-  const uint64_t min_log = versions_->LogNumber();
+  // 
+  const uint64_t min_log = versions_->LogNumber();  // 获取VersionSet中的log_number_
   const uint64_t prev_log = versions_->PrevLogNumber();
   std::vector<std::string> filenames;
   // 当前目录下的所有文件
@@ -357,7 +361,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
     if (ParseFileName(filenames[i], &number, &type)) {
       expected.erase(number);
       // 是日志类型
-      // number大于从manifest中读到的最大number（新生成的、未写入到manifest中）
+      // number大于从manifest中读到的最大number（未写入到manifest中的，也就是数据未落盘的）
       // number==prev_log,一般不使用，为了兼顾老版本的恢复功能
       if (type == kLogFile && ((number >= min_log) || (number == prev_log)))
         logs.push_back(number);
@@ -383,6 +387,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
     // The previous incarnation may not have written any MANIFEST
     // records after allocating this log number.  So we manually
     // update the file number allocation counter in VersionSet.
+    // 因为日志的filenumber比较新，有可能没有记录进VersionSet的next_file_number_
     versions_->MarkFileNumberUsed(logs[i]);
   }
 
@@ -393,7 +398,7 @@ Status DBImpl::Recover(VersionEdit* edit, bool* save_manifest) {
   return Status::OK();
 }
 
-// 从文件中生成
+// 从.log文件中恢复内容
 Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
                               bool* save_manifest, VersionEdit* edit,
                               SequenceNumber* max_sequence) {
@@ -453,6 +458,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       mem = new MemTable(internal_comparator_);
       mem->Ref();
     }
+    // 写入Memtable
     status = WriteBatchInternal::InsertInto(&batch, mem);
     MaybeIgnoreError(&status);
     if (!status.ok()) {
@@ -463,7 +469,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
     if (last_seq > *max_sequence) {
       *max_sequence = last_seq;
     }
-
+    // 如果Memtable内容过多，进行Flush
     if (mem->ApproximateMemoryUsage() > options_.write_buffer_size) {
       compactions++;
       *save_manifest = true;
@@ -481,6 +487,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
   delete file;
 
   // See if we should keep reusing the last log file.
+  // 重用上一个log file
   if (status.ok() && options_.reuse_logs && last_log && compactions == 0) {
     assert(logfile_ == nullptr);
     assert(log_ == nullptr);
@@ -492,7 +499,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       log_ = new log::Writer(logfile_, lfile_size);
       logfile_number_ = log_number;
       if (mem != nullptr) {
-        mem_ = mem;
+        mem_ = mem;  // 当前db的Memtable中是有数据的噢
         mem = nullptr;
       } else {
         // mem can be nullptr if lognum exists but was empty.
@@ -501,7 +508,7 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
       }
     }
   }
-
+  // 没有重用WAL, 将Memtable进行Flush
   if (mem != nullptr) {
     // mem did not get reused; compact it.
     if (status.ok()) {
@@ -563,7 +570,7 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
   return s;
 }
 
-//  Minor Compaction
+//  Minor Compaction(Flush)
 void DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
   assert(imm_ != nullptr);
@@ -583,7 +590,9 @@ void DBImpl::CompactMemTable() {
   // Replace immutable memtable with the generated Table
   if (s.ok()) {
     edit.SetPrevLogNumber(0);
-    // 落盘成功，更新edit d log number，这样旧的日志则会被清楚
+    // 落盘成功，更新edit的logfile_number_，此logfile_number_会
+    // 通过VersionSet::LogAndApply赋值给VersionSet::logfile_number_
+    // 用于在RemoveObsoleteFiles中清除旧的日志
     edit.SetLogNumber(logfile_number_);  // Earlier logs no longer needed
     // 进行了Minor Compaction，所以要生成新的Version
     s = versions_->LogAndApply(&edit, &mutex_);
@@ -1204,11 +1213,12 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   MutexLock l(&mutex_);
   // snapshot 是序列号，uint64_t
   SequenceNumber snapshot;
-  // 支持对于指定 Snapshot的get，只是简单的将Snapshot的SequnceNumber作为最大的SequnceNumber即可
+  // 对于指定 Snapshot的get，只是简单的将Snapshot的SequnceNumber作为最大的SequnceNumber即可
+  // 这个Snapshot是客户端在ReadOption中指定的
   if (options.snapshot != nullptr) {
     snapshot =
         static_cast<const SnapshotImpl*>(options.snapshot)->sequence_number();
-  } else {
+  } else {  // 没有指定Snapshot的就是
     snapshot = versions_->LastSequence();
   }
 
@@ -1270,11 +1280,12 @@ void DBImpl::RecordReadSample(Slice key) {
   }
 }
 
+// 使用当前Version的lastseq 创建一个Snapshot 插入到 Snapshots 双向链表中
 const Snapshot* DBImpl::GetSnapshot() {
   MutexLock l(&mutex_);
   return snapshots_.New(versions_->LastSequence());
 }
-
+// 删除
 void DBImpl::ReleaseSnapshot(const Snapshot* snapshot) {
   MutexLock l(&mutex_);
   snapshots_.Delete(static_cast<const SnapshotImpl*>(snapshot));
@@ -1308,9 +1319,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   // 线程才会被唤醒，这里需要注意，线程被唤醒后会继续检查循环条件，如果满足条件(没完成也没在头部)还会继续睡眠。这里分两种情况：
   //   1. 所加入的任务被处理
   //   2. 所加入的任务排在了队列的头部
-  // 对于第一种情况，线程退出循环后，会检查一下w.done，然后直接返回。
+  // 对于第一种情况，线程退出循环后，会检查一下 w.done, 然后直接返回。
   // 对于第二种情况，leveldb将这个生产者选为消费者。然后让它进行后面的处理。
   // 不管在什么情况下，只会有一个生产者线程的任务放在队列头部，但是有可能一个时间会有多个生产者线程的任务被处理掉(组成BatchGroup)。
+  // pthread_cond_wait 比较耗时，Rocksdb在此基础上进行了优化（见rocksdb中：WriteThread::JoinBatchGroup）
   while (!w.done && &w != writers_.front()) {
     w.cv.Wait();
   }
@@ -1338,7 +1350,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     // 所以对于并发的logger和writes,是线程安全的，不用再施加锁，可以临时的释放锁
     {
       mutex_.Unlock();
-      // 写日志
+      // 写日志,写的内容是write_batch的Contents
       status = log_->AddRecord(WriteBatchInternal::Contents(write_batch));
       bool sync_error = false;
       if (status.ok() && options.sync) {
@@ -1440,7 +1452,8 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
 
 // REQUIRES: mutex_ is held
 // REQUIRES: this thread is currently at the front of the writer queue
-// 写入之前检查 MemTable，检查 Immutable Memtable, 是否需要 Compaction
+// 写入之前腾空间
+// 检查 MemTable，检查 Immutable Memtable, 是否需要 Compaction
 Status DBImpl::MakeRoomForWrite(bool force) {
   mutex_.AssertHeld();  // 必须持有锁
   assert(!writers_.empty());  // 任务队列不为空
@@ -1492,20 +1505,22 @@ Status DBImpl::MakeRoomForWrite(bool force) {
       assert(versions_->PrevLogNumber() == 0);
       uint64_t new_log_number = versions_->NewFileNumber();
       WritableFile* lfile = nullptr;
-      // 产生新的log文件
+      // 创建新的log文件
       s = env_->NewWritableFile(LogFileName(dbname_, new_log_number), &lfile);
       if (!s.ok()) {
         // Avoid chewing through file number space in a tight loop.
+        // 该方法做了一个检查，避免创建lognumber失败时候，重试加剧lognumber的递增
         versions_->ReuseFileNumber(new_log_number);
         break;
       }
-      // 释放掉旧的日志（注意，可不是删除磁盘上的日志文件）
+      // 释放掉旧的log Writer对象（注意，可不是删除磁盘上的日志文件）
       delete log_;
       delete logfile_;
 
       // 替换新的（空的）日志文件
       logfile_ = lfile;
-      logfile_number_ = new_log_number;  // 旧的log file会被
+      // logfile_number_增加了，旧的log file会被自动回收掉
+      logfile_number_ = new_log_number;  
       log_ = new log::Writer(lfile);
       // 将 Memtable 切换成 immutable memtable
       imm_ = mem_;
@@ -1626,7 +1641,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
   VersionEdit edit;
   // Recover handles create_if_missing, error_if_exists
   bool save_manifest = false;
-  // 从MANIFEST文件中恢复
+  // 恢复数据库的状态
   Status s = impl->Recover(&edit, &save_manifest);
   if (s.ok() && impl->mem_ == nullptr) {
     // Create new log and a corresponding memtable.
