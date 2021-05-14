@@ -61,7 +61,8 @@ class MergingIterator : public Iterator {
     // true for all of the non-current_ children since current_ is
     // the smallest child and key() == current_->key().  Otherwise,
     // we explicitly position the non-current_ children.
-    // 确保所有的子iterator都是key()的Next
+    // 确保所有的子iterator都是 key() 的Next
+    // O(n) 在rocksdb中使用了heap
     if (direction_ != kForward) {
       for (int i = 0; i < n_; i++) {
         IteratorWrapper* child = &children_[i];

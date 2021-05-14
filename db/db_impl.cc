@@ -987,7 +987,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   while (input->Valid() && !shutting_down_.load(std::memory_order_acquire)) {
     // Prioritize immutable compaction work
     // 当一发现 has_imm的时候，就需要进行 Minor Compaction
-    // 当需要进行minor compaction的时候有major compaction正在进行，则会首先暂停major compaction
+    // 当需要进行minor compaction的时候有major compaction正在进行，则会首先暂停major compaction,
+    // 因为Minor Compaction的优先级更高
     if (has_imm_.load(std::memory_order_relaxed)) {
       const uint64_t imm_start = env_->NowMicros();
       mutex_.Lock();
